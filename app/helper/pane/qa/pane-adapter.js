@@ -29,6 +29,25 @@ const EDITORS = {
     title: "Snippet.txt",
   },
 };
+// The browser windows show the page the capture loaded (screenshots/macos.sh serves
+// fixture-assets/browser-page as https://preview-of-cv-on-clara.blot.im/; the other captures
+// are still on example.com until recaptured). The images are inlined: a srcdoc page has no base URL.
+const BROWSER_URL = "https://preview-of-cv-on-clara.blot.im/";
+const browserPage = () => {
+  const dir = path.join(
+    __dirname,
+    "..",
+    "screenshots",
+    "fixture-assets",
+    "browser-page"
+  );
+  return fs
+    .readFileSync(path.join(dir, "index.html"), "utf8")
+    .replace(/src="(images\/[\w-]+\.png)"/g, (m, file) => {
+      const data = fs.readFileSync(path.join(dir, file)).toString("base64");
+      return `src="data:image/png;base64,${data}"`;
+    });
+};
 const BUILT_EDITORS = ["macos"]; // the OSes whose editor skin exists; the others fall through to fixtures
 
 const TREE = `About.txt
@@ -68,6 +87,19 @@ const VIEW = { default: "list" };
 // The QA windows have the reference's fixed size and are never pinned: the harness
 // chooses the skin with <html data-os> and the theme with prefers-color-scheme.
 async function render(caseId, c) {
+  if (c.view === "browser") {
+    // every OS: until a skin exists the window falls back to the macOS look, and the case is informational
+    const size =
+      c.os === "windows" ? (await referenceGeometry(c)).size : c.windowSize;
+    const result = pane.browser({
+      url: BROWSER_URL,
+      html: browserPage(),
+      title: "Clara Xiao",
+      width: `${size.width}px`,
+      height: `${size.height}px`,
+    });
+    return { html: result.html, ...pane.assets() };
+  }
   if (EDITORS[c.view]) {
     if (!BUILT_EDITORS.includes(c.os)) return null;
     const result = EDITORS[c.view].render({

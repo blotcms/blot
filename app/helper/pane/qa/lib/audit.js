@@ -59,12 +59,36 @@ const EDITORS = {
 };
 Object.assign(SAMPLES, EDITORS);
 const isEditor = (name) => name in EDITORS;
+// The browser windows: a static page, a live one (a relative src, so the audit never touches the
+// network), a long address and an empty page.
+const BROWSERS = {
+  browserStatic: {
+    browser: {
+      url: "https://example.com/",
+      html: "<h1>Example</h1><p>A page.</p>",
+      title: "Example Domain",
+    },
+  },
+  browserLive: { browser: { url: "https://example.org/", src: "/live" } },
+  browserLong: {
+    browser: {
+      url: "https://a-very-long-host-name-for-the-width-test.example.com/with/a/long/path?and=a&query=string",
+      html: "<p>x</p>",
+      title:
+        "A very long page title that goes on and on for the width test of the tab",
+    },
+  },
+  browserEmpty: { browser: { url: "example.com" } },
+};
+Object.assign(SAMPLES, BROWSERS);
 const render = (s) =>
-  (s.code !== undefined
-    ? pane.code(s.code, s.options)
-    : s.text !== undefined
-      ? pane.text(s.text, s.options)
-      : pane.folder(s.tree, { title: "Docs", ...(s.options || {}) })
+  (s.browser !== undefined
+    ? pane.browser(s.browser)
+    : s.code !== undefined
+      ? pane.code(s.code, s.options)
+      : s.text !== undefined
+        ? pane.text(s.text, s.options)
+        : pane.folder(s.tree, { title: "Docs", ...(s.options || {}) })
   ).html;
 
 // Runs in the page: findings for one window.
@@ -80,9 +104,23 @@ function inspect(expected) {
     !(win.getAttribute("aria-label") || "").trim()
   )
     f("name", "the window has no accessible name (figure + aria-label)");
-  for (const el of win.querySelectorAll(".pane-bar, .pane-head"))
+  for (const el of win.querySelectorAll(".pane-bar, .pane-head, .pane-url"))
     if (el.getAttribute("aria-hidden") !== "true")
       f("chrome", `${name(el)} is not aria-hidden`);
+  // browser windows: every iframe is named, a static page has no scripts, and nothing is same-origin
+  for (const frame of win.querySelectorAll("iframe")) {
+    if (!(frame.getAttribute("title") || "").trim())
+      f("name", "an iframe has no title");
+    if (!frame.hasAttribute("sandbox"))
+      f("frame", "an iframe is not sandboxed");
+    const box = frame.getAttribute("sandbox") || "";
+    if (/allow-same-origin/.test(box))
+      f("frame", "an iframe is sandboxed with allow-same-origin");
+    if (frame.hasAttribute("srcdoc") && /allow-scripts/.test(box))
+      f("frame", "a static page may run scripts");
+  }
+  if (win.querySelector(".pane-url") && !win.querySelector(".pane-page"))
+    f("body", "a browser window has no page viewport");
   const body = win.querySelector(".pane-body");
   if (body) {
     if (body.tagName !== "PRE") f("body", "the editor's text is not in a pre");
@@ -235,6 +273,26 @@ function layout() {
       );
     }).length,
     headShown: shown(".pane-head"),
+    // browser windows: the address field stays inside the window and clear of the glyph pill
+    urlOut: (() => {
+      const url = win.querySelector(".pane-url");
+      if (!url) return 0;
+      const r = url.getBoundingClientRect();
+      const w = win.getBoundingClientRect();
+      const head = win.querySelector(".pane-head");
+      const h =
+        head && getComputedStyle(head).display !== "none"
+          ? head.getBoundingClientRect()
+          : null;
+      return (
+        (r.left < w.left - 0.5 || r.right > w.right + 0.5 ? 1 : 0) +
+        (h && r.right > h.left + 0.5 && r.left < h.right ? 1 : 0) +
+        (r.width < 60 ? 1 : 0)
+      );
+    })(),
+    pageHeight: win.querySelector(".pane-page")
+      ? win.querySelector(".pane-page").getBoundingClientRect().height
+      : null,
     bodyOverflow: win.querySelector(".pane-body")
       ? win.querySelector(".pane-body").scrollWidth -
         win.querySelector(".pane-body").clientWidth
@@ -325,7 +383,7 @@ async function audit(
             ]);
         }
         // forced colours: the frame is a plain border and nothing casts a shadow
-        for (const sample of ["small", "text", "code"]) {
+        for (const sample of ["small", "text", "code", "browserStatic"]) {
           await page_(skin, theme, sample, WIDE);
           await emulate({ "forced-colors": "active" });
           const forced = await page.evaluate(() => {
@@ -365,7 +423,7 @@ async function audit(
         // motion: nothing animates, whatever the preference
         for (const motion of ["no-preference", "reduce"]) {
           await emulate({ "prefers-reduced-motion": motion });
-          for (const sample of ["small", "text", "code"]) {
+          for (const sample of ["small", "text", "code", "browserStatic"]) {
             await page_(skin, theme, sample, WIDE);
             const moving = await page.evaluate(
               () => document.getAnimations().length
@@ -466,6 +524,40 @@ async function audit(
                 )
                 .join(" ")
           );
+        }
+        // narrow browser windows: nothing spills out, the address field keeps room and the page keeps a height
+        for (const sample of Object.keys(BROWSERS)) {
+          for (const width of [WIDE, ...NARROW]) {
+            await page_(skin, theme, sample, width);
+            const l = await page.evaluate(layout);
+            if (l.pageOverflow > 0 || l.winWidth > width + 0.5)
+              add(skin, theme, sample, width, [
+                {
+                  rule: "overflow",
+                  message: `the window is ${l.winWidth}px wide in a ${width}px page (page scrolls by ${l.pageOverflow}px)`,
+                },
+              ]);
+            if (l.urlOut)
+              add(skin, theme, sample, width, [
+                {
+                  rule: "columns",
+                  message:
+                    "the address field is outside the window, under the glyph pill or under 60px wide",
+                },
+              ]);
+            if (!(l.pageHeight > 100))
+              add(skin, theme, sample, width, [
+                { rule: "overflow", message: "the page viewport has no room" },
+              ]);
+            if (width !== WIDE)
+              add(
+                skin,
+                theme,
+                sample,
+                width,
+                await page.evaluate(inspect, undefined)
+              );
+          }
         }
         // narrow editors: nothing spills out, prose wraps instead of scrolling sideways, and a
         // region that does scroll (code, or long text) is still reachable and named
