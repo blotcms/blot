@@ -146,16 +146,29 @@
 }
 
 .home-template-folder {
+  position: relative;
   width: 60%;
+  aspect-ratio: 1.6;
+  container-type: inline-size;
   opacity: 0;
   pointer-events: none;
 }
 
-/* the template's folder, a pane window (app/helper/pane) in the visitor's OS look */
+/* The template's folder, a pane window (app/helper/pane) in the visitor's OS look. It is laid
+   out at a desktop window's width and scaled down to the card, so it looks like a real window
+   seen smaller rather than a cramped one. tan(atan2(a, b)) is a/b as a plain number, the
+   card's width over the window's; older browsers get the fixed scale before it. */
 .home-template-folder .pane {
-  --pane-w: 100%;
+  --pane-w: 600px;
   --pane-max: none;
-  aspect-ratio: 1.4;
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  aspect-ratio: 1.6;
+  transform-origin: 0 0;
+  transform: scale(0.45);
+  transform: scale(min(1, tan(atan2(100cqw, 600px))));
 }
 
 .home-template-folder .pane-tree {
