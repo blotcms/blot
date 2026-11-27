@@ -217,12 +217,31 @@ OSA
   osascript -e 'tell application "TextEdit" to close every window saving no' >>"$OUT/editors.log" 2>&1
   sleep 2
 done
-# Browser: Safari, a small window on https://example.com. Placed and read back through System
-# Events, like the editors. Best-effort: debug screenshots and logs show what the runner allowed.
-# (A local HTTP server made macOS ask "Allow Python to find devices on local networks?", and the
-# dialog ended up in the capture, so the page is a real site instead.)
+# Browser: Safari, a small window on the study's page (template-patterns software-browser; the
+# fixture is fixture-assets/browser-page), served over HTTPS at https://preview-of-cv-on-clara.blot.im/
+# so the address field reads that host with a padlock. The host is a /etc/hosts entry for 127.0.0.1,
+# the certificate is self-signed with that name and trusted in the System keychain (the runner has
+# passwordless sudo), and browser-server.py serves the directory on 443. Placed and read back
+# through System Events, like the editors. Best-effort: debug screenshots and logs show what the
+# runner allowed. (An earlier try with a plain local HTTP server made macOS ask "Allow Python to find
+# devices on local networks?" and the dialog ended up in the capture: browser.log records whether
+# this one did, and stage.log lists what was on screen before the capture.)
+BROWSER_HOST="preview-of-cv-on-clara.blot.im"
+BROWSER_DIR="/tmp/pane-browser"
+{
+  rm -rf "$BROWSER_DIR"; mkdir -p "$BROWSER_DIR"
+  cp -R "$HERE/fixture-assets/browser-page/." "$BROWSER_DIR/"
+  openssl req -x509 -newkey rsa:2048 -nodes -days 30 -sha256 -subj "/CN=$BROWSER_HOST" \
+    -addext "subjectAltName=DNS:$BROWSER_HOST" -addext "extendedKeyUsage=serverAuth" \
+    -keyout /tmp/pane-browser.key -out /tmp/pane-browser.pem
+  echo "127.0.0.1 $BROWSER_HOST" | sudo tee -a /etc/hosts
+  sudo security add-trusted-cert -d -r trustRoot -p ssl -k /Library/Keychains/System.keychain /tmp/pane-browser.pem
+  sudo python3 "$HERE/browser-server.py" "$BROWSER_DIR" /tmp/pane-browser.pem /tmp/pane-browser.key >"$OUT/browser-server.log" 2>&1 &
+  sleep 3
+  curl -sS -o /dev/null -w "page: %{http_code} (verify result %{ssl_verify_result}, 0 when the certificate is trusted)\n" "https://$BROWSER_HOST/"
+} >>"$OUT/browser.log" 2>&1
 clear_stage "browser"
-open -a Safari "https://example.com/"; sleep 10
+open -a Safari "https://$BROWSER_HOST/"; sleep 10
 # One Safari window only (a start page or restored window would show behind it). Safari's own
 # AppleEvents time out here (-1712), so use System Events: press the close button of window 2.
 osascript >>"$OUT/browser.log" 2>&1 <<OSA
@@ -289,6 +308,34 @@ OSA
   screencapture -x "$OUT/debug-safari-done.png"
   cliclick m:20,700; sleep 4   # a drag ghost of the palette lingered in the page for a moment
 } >>"$OUT/browser.log" 2>&1
+# Order the right-hand items as the study has them: New Tab (+), Share, Tab Overview. Safari's default
+# is Share, +, Tabs, so with the sheet open again drag + to the left of Share (the items sit at fixed
+# offsets from the window's right edge: Share 102pt, + 66pt, Tabs 30pt). Unverified on a runner:
+# debug-safari-reordered.png and the "toolbar:" line in browser.log show what happened.
+{
+  osascript -e 'tell application "System Events" to tell process "Safari" to set frontmost to true'
+  osascript -e 'tell application "System Events" to tell process "Safari" to click menu item "Customize Toolbar…" of menu "View" of menu bar 1'
+  sleep 3
+  read -r WX WY WW WH <<< "$(osascript -e 'tell application "System Events" to tell process "Safari" to return (position of window 1) & (size of window 1)' | tr -d ',')"
+  RY=$((WY + 26)); PX=$((WX + WW - 66)); SX1=$((WX + WW - 102))
+  cliclick -w 100 dd:$PX,$RY dm:$((PX - 20)),$RY dm:$((SX1 - 14)),$RY du:$((SX1 - 14)),$RY
+  sleep 2
+  screencapture -x "$OUT/debug-safari-reordered.png"
+  osascript <<OSA
+tell application "System Events" to tell process "Safari"
+  try
+    click button "Done" of sheet 1 of window 1
+  on error
+    try
+      click button "Done" of window 1
+    end try
+  end try
+end tell
+OSA
+  sleep 3
+  cliclick m:20,700; sleep 2
+  osascript -e 'tell application "System Events" to tell process "Safari" to return "toolbar: " & (description of every button of toolbar 1 of window 1 as string)'
+} >>"$OUT/browser.log" 2>&1
 place   # the sheet widened the window; put it back
 # Finder must not show below the browser; read what is open, then capture
 clear_stage "browser, before the capture" Safari
@@ -309,6 +356,7 @@ OSA
 screencapture -x "$OUT/debug-safari-full.png"
 capture "macos-$THEME$SUFFIX-browser"
 osascript -e 'tell application "Safari" to quit' >>"$OUT/browser.log" 2>&1
+sudo pkill -f browser-server.py >>"$OUT/browser.log" 2>&1
 osascript -e 'tell application "TextEdit" to quit' >>"$OUT/browser.log" 2>&1
 sleep 2
 # Desktop icons: the "Your site" contents (files and the Fruits folder) as icons on the
