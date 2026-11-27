@@ -65,7 +65,8 @@ Spec: `tests/gallery.js` (no Chrome).
    a change that never reached the image. This is the easiest mistake to make here.
 4. **Local Chrome has your machine's fonts.** Windows (Segoe UI Variable) and Linux
    (Cantarell) cases are only meaningful when rendered on the matching runner: push, let
-   pane-qa render them, `git pull --rebase`, then diff. Locally they check structure only.
+   pane-qa render them, `app/helper/pane/qa/fetch-rendered.sh` (it downloads the run's
+   artifacts into `rendered/`; a push no longer commits them), then diff. Locally they check structure only.
 5. The pane-qa run for a push is cancelled by the next push to the same branch
    (`concurrency` is per ref). Agents working in parallel therefore use separate
    branches and merge into `pane-screenshots-spike` at milestones.
@@ -167,7 +168,9 @@ Spec: `tests/gallery.js` (no Chrome).
   `pane-screenshots.yml` is now manual-only (use `gh workflow run pane-screenshots.yml --ref <branch>`).
 - Marked `windows-light-list` and `windows-dark-list` QA cases as `"informational": true` in
   `qa/thresholds.json` (they report status but don't fail the run).
-- Kept `rendered/` committed (makes the viewer work without Chrome).
+- `rendered/` stays committed (the viewer works without Chrome), but only manual pane-qa runs and
+  pane-screenshots' call refresh it; a push uploads its renders as artifacts (`qa/fetch-rendered.sh`),
+  because each bot commit held the PR's CI until someone pushed again.
 - Debug screenshot captures moved to Actions artifacts (no longer committed).
 
 ## Still open
