@@ -1,0 +1,44 @@
+/* Page spacing for pane's mock windows (app/helper/pane): pane draws the window and leaves
+   its margins to the page, like an image. These replace the old finder's .window rules.
+   `body .pane` outranks pane's own `.pane{margin:0}`, which the bundle appends after this. */
+
+body .pane {
+  margin: 2.8rem 0;
+}
+
+/* a window on a coloured desktop (<background>): inset from its edges */
+background {
+  padding: 2.8rem 1.4rem;
+}
+
+background .pane {
+  margin: 0;
+  flex-shrink: 1;
+}
+
+/* the editors' text, inset from the window's edges a little more than TextEdit's own
+   (pane's --ed-pad; the skin's default is TextEdit's 0 10px) */
+body .pane-ed {
+  --ed-pad: 6px 16px 14px;
+}
+
+.pane + h2 {
+  margin-top: 5rem;
+}
+
+/* the windows that only decorate something else (the homepage cards, the template page) take
+   their place from it */
+.home-template-folder .pane,
+.template-folder-wrapper .pane {
+  margin: 0;
+}
+
+@media screen and (max-width: 600px) {
+  body .pane {
+    margin: 2rem 0;
+  }
+
+  background {
+    padding: 2rem 1rem;
+  }
+}

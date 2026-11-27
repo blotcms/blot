@@ -60,6 +60,11 @@ function editor(kind, source, options) {
     // a newline right after <pre> is dropped by the HTML parser: keep a leading blank line
     body = `<pre ${attrs}>${raw.startsWith("\n") ? "\n" : ""}${escape(raw)}</pre>`;
   }
+  // Line breaks as character references: a template that includes this page with an indented
+  // partial tag ({{> body}}) indents every line of the partial, and would shift every line
+  // after the first. A reference is the same newline to the browser (and the parser still
+  // drops one straight after <pre>, so the leading blank line above stays right).
+  body = body.replace(/\n/g, "&#10;");
 
   const size = [
     options.width && `--pane-w:${escape(options.width)}`,

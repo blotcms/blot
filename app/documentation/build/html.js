@@ -51,6 +51,15 @@ module.exports = async (contents) => {
     result = result.replace(/{{&gt; /g, "{{> ");
   }
 
+  // The line breaks inside pane's editor windows as character references: this page is
+  // included in a layout by an indented {{> body}} tag, and mustache indents every line of
+  // it, which would shift each line of the window's text after the first. (pane writes them
+  // this way, but cheerio decodes them again when it parses pane's markup.)
+  result = result.replace(
+    /(<pre class="pane-body"[^>]*>)([\s\S]*?)(<\/pre>)/g,
+    (match, open, body, close) => open + body.replace(/\n/g, "&#10;") + close
+  );
+
   // remove the indent from the line which contains the body partial
   // this prevents issues with code snippets
   if (result.includes("{{> body}}")) {

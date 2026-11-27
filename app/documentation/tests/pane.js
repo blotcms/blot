@@ -72,4 +72,13 @@ describe("documentation windows (pane)", function () {
     );
     expect(css).toContain("pane.assets().css");
   });
+
+  it("writes the editor windows' line breaks as references, so an indented {{> body}} can't shift them", async function () {
+    const out = await html(
+      '<pre class="text" title="Hidden.txt"><code>Menu: no\nLink: /hidden\n\nText</code></pre>'
+    );
+    const body = out.match(/<pre class="pane-body"[^>]*>([\s\S]*?)<\/pre>/)[1];
+    expect(body).not.toContain("\n");
+    expect(body).toBe("Menu: no&#10;Link: /hidden&#10;&#10;Text");
+  });
 });

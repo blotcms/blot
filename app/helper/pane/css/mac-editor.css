@@ -11,6 +11,6 @@
 .pane.pane-ed .pane-bar::before{left:84px;top:7.5px;width:14px;height:16px;border-radius:0;box-shadow:none;background:url(icon:mac/text) center/contain no-repeat}
 .pane.pane-ed .pane-bar::after{position:static;display:inline-block;width:9px;height:8px;margin-left:5px;vertical-align:-1px;background:var(--ed-chev);-webkit-mask:var(--g-chev) center/9px 8px no-repeat;mask:var(--g-chev) center/9px 8px no-repeat}
 .pane.pane-ed .pane-bar:empty::before,.pane.pane-ed .pane-bar:empty::after{display:none}
-.pane.pane-ed .pane-body{padding:0 10px;color:var(--ed-fg);font:11px/13px Menlo,"SF Mono",ui-monospace,Monaco,Consolas,"DejaVu Sans Mono",monospace}
+.pane.pane-ed .pane-body{padding:var(--ed-pad,0 10px);color:var(--ed-fg);font:11px/13px Menlo,"SF Mono",ui-monospace,Monaco,Consolas,"DejaVu Sans Mono",monospace}
 .pane.pane-bare .pane-body{padding:10px}
 .pane.pane-hl{--tok-k:#ad3da4;--tok-s:#d12f1b;--tok-c:#5d6c79;--tok-n:#272ad8;--tok-f:#4b21b0;--tok-a:#836c28;--tok-t:#ad3da4;--tok-m:#78492a;--tok-y:#3e8087;--tok-v:#4b21b0}

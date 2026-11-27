@@ -563,6 +563,8 @@ measured off a wallpaper is later work, gated on the two-backdrop capture plan i
 
 - **Editor windows** (`pane.text`, `pane.code`; `lib/editor.js`, `lib/highlight.js`; macOS skin `css/mac-editor.css`;
   structure in `css/base.css`). One contract for all three OSes, so the Windows and Linux skins are CSS only.
+  A page may loosen the text's inset with `--ed-pad` (the skin's default is the OS editor's own, macOS `0 10px`);
+  line breaks in `.pane-body` are written as `&#10;` so an indented mustache partial can't shift the lines.
 
   ```html
   <figure class="pane pane-ed [pane-bare]" data-view="text|code" [data-lang="html"] [data-pin] [data-theme]
