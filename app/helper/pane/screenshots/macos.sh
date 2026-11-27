@@ -279,7 +279,7 @@ OSA
 # nothing painted). A page with photos is far bigger as a PNG than white, so measure that, and reload
 # (Cmd-R) until it paints; the log records each try.
 painted() {  # 0 when the page area has the page in it (below the toolbar's shadow, which is not blank either)
-  screencapture -x -R$((L + 60)),$((T + 150)),$((R - L - 120)),$((B - T - 170)) /tmp/pane-painted.png 2>>"$OUT/browser.log"
+  screencapture -x -R$((L + 60)),$((T + 190)),$((R - L - 120)),$((B - T - 210)) /tmp/pane-painted.png 2>>"$OUT/browser.log"
   local n; n=$(stat -f %z /tmp/pane-painted.png); echo "page png bytes: $n" >>"$OUT/browser.log"
   [ "$n" -gt 12000 ]
 }
@@ -301,7 +301,15 @@ wait_painted() {
       4) pkill -x Safari; sleep 3; open -a Safari "https://$BROWSER_HOST/"; sleep 12; place ;;
     esac
   done
-  echo "page never painted" >>"$OUT/browser.log"; return 1
+  echo "page never painted" >>"$OUT/browser.log"
+  # diagnostics for the next try: does Safari paint any other page here? (screenshots in the run's artifacts)
+  local u n=0
+  for u in "https://example.com/" "file:///tmp/pane-browser/index.html" "https://$BROWSER_HOST/"; do
+    n=$((n + 1))
+    safari_keys 'keystroke "l" using command down'; safari_keys "keystroke \"$u\""; safari_keys 'key code 36'; sleep 10
+    screencapture -x "$OUT/debug-safari-diag-$n.png"; painted; echo "diag $u painted: $?" >>"$OUT/browser.log"
+  done
+  return 1
 }
 winpos() { osascript -e 'tell application "System Events" to tell process "Safari" to return (position of window 1)' 2>>"$OUT/browser.log"; }
 place
