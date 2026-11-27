@@ -81,7 +81,8 @@ temporarily move the window 20px and see whether anything shows behind it.
 
 ## pane-qa (the other workflow)
 `.github/workflows/pane-qa.yml` renders pane's output for every case on the matching runner
-(so system fonts line up), commits `../rendered/<os>/`, runs the unit tests and the viewer
+(so system fonts line up), uploads them as artifacts (a manual run also commits
+`../rendered/<os>/`), runs the unit tests and the viewer
 smoke test, and prints a diff summary. Notes:
 - Its dependency list is computed from the root `package.json` and cached (`node_modules`
   and Puppeteer's Chrome); a change to that list busts the cache.

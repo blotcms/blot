@@ -1,7 +1,9 @@
 # Renders the pane QA cases (app/helper/pane/qa) on the runner of the matching
 # OS, so the system fonts line up with the real screenshots (SF on macOS, Segoe
-# UI Variable on Windows, Cantarell on Ubuntu), and commits the images to
-# app/helper/pane/rendered/, like pane-screenshots does for reference/.
+# UI Variable on Windows, Cantarell on Ubuntu). On a push the images stay in the
+# run's pane-qa-<os> artifacts (qa/fetch-rendered.sh downloads them), so a push
+# gets no bot commit holding its CI. A manual run, or pane-screenshots' call
+# after new references, commits them to app/helper/pane/rendered/.
 # See app/helper/pane/qa/README.md.
 name: pane-qa
 
@@ -117,9 +119,10 @@ jobs:
           path: repo/app/helper/pane/rendered/${{ matrix.os }}
           if-no-files-found: warn
 
-  # Commits the renders next to the references so the local viewer works
-  # without Chrome. Pushes made with GITHUB_TOKEN don't trigger new runs.
-  commit:
+  # Puts the renders next to the references, runs the tests and the diff. Only
+  # a manual run (or pane-screenshots' call) commits them. Pushes made with
+  # GITHUB_TOKEN don't trigger new runs.
+  check:
     needs: render
     if: ${{ !cancelled() && github.ref_type == 'branch' && github.ref != 'refs/heads/master' }}
     runs-on: ubuntu-latest
@@ -155,7 +158,8 @@ jobs:
         run: |
           mkdir -p tools && cd tools && npm init -y >/dev/null
           npm install --no-audit --no-fund ${{ steps.deps.outputs.pkgs }}
-      - name: Commit images
+      # the tests and the diff below use the new images, committed or not
+      - name: Use the new images
         run: |
           OUT=app/helper/pane/rendered
           for os in macos windows linux; do
@@ -164,6 +168,10 @@ jobs:
             mkdir -p "$OUT/$os"
             cp rendered-artifacts/pane-qa-$os/*.png "$OUT/$os/" 2>/dev/null || true
           done
+      - name: Commit images
+        if: ${{ github.event_name != 'push' }}
+        run: |
+          OUT=app/helper/pane/rendered
           # a render whose pixels equal the committed image is not a change: keep the committed bytes,
           # so a push whose renders are all unchanged makes no commit (and holds no CI run)
           NODE_PATH="$PWD/tools/node_modules" node app/helper/pane/qa/restore-identical.js "$OUT" || echo "could not compare pixels; committing the renders as they are"

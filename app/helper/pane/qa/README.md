@@ -92,8 +92,11 @@ three shipped fixtures are crude on purpose: they make the tooling usable and te
 `render.js` uses Puppeteer at `deviceScaleFactor` = the reference's scale, with the
 viewport = reference size / scale. Fonts come from the machine, so the **pane-qa**
 workflow renders each OS's cases on the matching runner (macOS, Windows, Ubuntu with
-`fonts-cantarell`) and commits `rendered/<os>/`, like pane-screenshots does for
-`reference/`. Rendering locally works too; render only the OS you are on (`--os macos`),
+`fonts-cantarell`). On a push it uploads them as the run's `pane-qa-<os>` artifacts
+rather than committing them, so a push gets no bot commit that holds its CI;
+`qa/fetch-rendered.sh [branch] [os ...]` downloads the latest run's into `rendered/<os>/`.
+A manual run (`gh workflow run pane-qa.yml --ref <branch>`), and pane-screenshots after
+new references, commit `rendered/<os>/` as well. Rendering locally works too; render only the OS you are on (`--os macos`),
 because Segoe UI Variable and SF will not exist on the wrong machine.
 
 ## For agents: the loop
