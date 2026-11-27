@@ -6,7 +6,7 @@ describe("dashboard site settings save", function () {
   it("does not pass protected request fields to Blog.set", async function () {
     spyOn(Blog, "set").and.callThrough();
 
-    await this.submit(`/sites/${this.blog.handle}/settings/date`, {
+    await this.submit(`/sites/${this.blog.handle}/settings/posts`, {
       dateFormat: "MM/DD/YYYY",
       id: "attacker-controlled-id",
       owner: "attacker-controlled-owner",
@@ -27,13 +27,15 @@ describe("dashboard site settings save", function () {
   // sub-page used to bounce the user out to the site homepage because the
   // form omitted the `redirect` field and save/finish.js fell back to a
   // router-relative req.path of "/".
-  ["settings", "settings/images", "settings/links"].forEach((page) => {
-    it(`keeps the redirect on /${page} pointed back at itself`, async function () {
-      const $ = await this.parse(`/sites/${this.blog.handle}/${page}`);
-      const redirect = $('input[name="redirect"]').attr("value");
-      expect(redirect).toBe(`/sites/${this.blog.handle}/${page}`);
-    }, 30000);
-  });
+  ["settings/posts", "settings/redirects", "settings/services"].forEach(
+    (page) => {
+      it(`keeps the redirect on /${page} pointed back at itself`, async function () {
+        const $ = await this.parse(`/sites/${this.blog.handle}/${page}`);
+        const redirect = $('input[name="redirect"]').attr("value");
+        expect(redirect).toBe(`/sites/${this.blog.handle}/${page}`);
+      }, 30000);
+    }
+  );
 
   // The resave is queued in Redis (sync/pendingRebuilds), so a deploy which
   // kills the process running it doesn't leave the blog half saved
@@ -45,22 +47,21 @@ describe("dashboard site settings save", function () {
 
     // The links page has the shared settings form first, which this.submit
     // would post to instead, so the route's handler is called directly
-    const handler = linkFormat.stack.find(
-      (layer) => layer.route && layer.route.methods.post
-    ).route.stack[0].handle;
-    const res = { message: jasmine.createSpy("message") };
+    const res = {
+      locals: { base: "/sites/" + this.blog.handle },
+      message: jasmine.createSpy("message"),
+    };
 
-    await handler(
+    await linkFormat.save(
       {
         body: { format: "", custom: "/archive/{{slug}}" },
         blog: this.blog,
-        baseUrl: "/settings/links",
       },
       res
     );
 
     expect(res.message).toHaveBeenCalledWith(
-      "/settings/links",
+      "/sites/" + this.blog.handle + "/settings/posts",
       "Saved changes to link format"
     );
     expect(pendingRebuilds.request).toHaveBeenCalledWith(this.blog.id, [
@@ -69,7 +70,7 @@ describe("dashboard site settings save", function () {
   }, 30000);
 
   it("does not redirect to the homepage when the form omits a redirect field", async function () {
-    const res = await this.submit(`/sites/${this.blog.handle}/settings`, {
+    const res = await this.submit(`/sites/${this.blog.handle}/settings/posts`, {
       "plugins.typeset.options.punctuation": "on",
     });
 

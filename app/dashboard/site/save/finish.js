@@ -1,3 +1,4 @@
+var safeRedirect = require("dashboard/util/safe-redirect");
 var Blog = require("models/blog");
 var pendingRebuilds = require("sync/pendingRebuilds");
 var assets = require("storage/assets");
@@ -26,7 +27,11 @@ async function saveAndFinish(req, res, next) {
   // req.path is relative to the router mount, so fall back to the full
   // dashboard path (req.baseUrl + req.path) rather than "/", which would
   // bounce the user out to the site homepage.
-  var redirect = req.body.redirect || (req.baseUrl || "") + req.path;
+  var redirect = safeRedirect(
+    req.body.redirect,
+    (req.baseUrl || "") + req.path,
+    req.hostname
+  );
 
   var previousAvatar = req.blog.avatar;
 

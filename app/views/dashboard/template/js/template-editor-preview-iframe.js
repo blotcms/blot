@@ -57,7 +57,21 @@ if (previewIframeContainer) {
     return trimmed;
   };
 
+  // The same state in cookies, which the server reads to render the preview
+  // as the visitor left it (app/dashboard/site/template/preview-state.js)
+  var writeCookie = function writeCookie(name, value) {
+    try {
+      document.cookie =
+        name +
+        "=" +
+        encodeURIComponent(value) +
+        "; path=/sites; samesite=lax; max-age=" +
+        (value ? 31536000 : 0);
+    } catch (err) {}
+  };
+
   var writeStoredPath = function writeStoredPath(path) {
+    writeCookie("template-preview-path", path ? previewOrigin + path : "");
     if (!storageKey || !localStorageAvailable) return;
     try {
       if (path) {
@@ -83,6 +97,7 @@ if (previewIframeContainer) {
   };
 
   var writeStoredViewMode = function writeStoredViewMode(mode) {
+    writeCookie(VIEW_MODE_STORAGE_KEY, isValidViewMode(mode) ? mode : "");
     if (!viewModeStorageKey || !localStorageAvailable) return;
     if (!isValidViewMode(mode)) {
       try {
@@ -123,11 +138,23 @@ if (previewIframeContainer) {
   // The page the visitor is on in the preview, with its query string
   var currentPath = storedPath || pathname;
 
-  if (storedPath && storedPath !== pathname) {
-    iframe.setAttribute("src", previewOrigin + storedPath);
+  // The server renders the saved page into the iframe's address when the
+  // cookie has it; this covers a path only localStorage holds
+  if (storedPath) {
+    // A path on the preview host only, whatever localStorage holds
+    var storedUrl = null;
+    try {
+      storedUrl = new URL(storedPath, previewOrigin);
+    } catch (err) {}
+    if (!storedUrl || storedUrl.origin !== previewOrigin) {
+      storedPath = "";
+      currentPath = pathname;
+    } else if (iframe.src !== storedUrl.href)
+      iframe.setAttribute("src", storedUrl.href);
   }
 
   updatePreviewLink(storedPath);
+  if (storedPath) writeStoredPath(storedPath);
 
   // Listen to messages sent from the iframe which contains
   // the preview of the template. We inject the script
@@ -317,6 +344,14 @@ if (previewIframeContainer) {
   }
 
   // Initialize view using stored mode (defaulting to desktop)
+  // The server renders the state its cookie holds, which is what the page
+  // already shows; localStorage wins where the cookie was missing or stale
   var storedViewMode = readStoredViewMode();
-  setView(storedViewMode || "desktop");
+  if (storedViewMode) writeStoredViewMode(storedViewMode);
+  setView(
+    storedViewMode ||
+      (previewIframeContainer.classList.contains("is-mobile")
+        ? "mobile"
+        : "desktop")
+  );
 }

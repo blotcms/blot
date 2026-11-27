@@ -108,7 +108,7 @@ dashboard
     try {
       if (req.body.cancel) {
         if (!req.blog.client) {
-          return res.redirect(res.locals.dashboardBase + "/client");
+          return res.redirect(res.locals.dashboardBase + "/sync");
         }
 
         try {
@@ -117,7 +117,7 @@ dashboard
           return next(disconnectError);
         }
 
-        return res.redirect(res.locals.dashboardBase + "/client");
+        return res.redirect(res.locals.dashboardBase + "/sync");
       }
 
       const blogID = req.blog.id;

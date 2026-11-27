@@ -17,20 +17,8 @@ if (!customInput || !customButtons) {
   return;
 }
 
-function submitForm(targetForm) {
-  const formData = new FormData(targetForm);
-  const data = new URLSearchParams();
-
-  formData.forEach((value, key) => {
-    data.append(key, value);
-  });
-
-  const xhr = new XMLHttpRequest();
-
-  xhr.open("POST", targetForm.action, true);
-  xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
-  xhr.send(data.toString());
-}
+// Saved like the other settings, so the sync status shows it
+const { submitForm } = require("./site-settings-autosubmit.js");
 
 function toggleCustomControls(selectedFormat) {
   if (selectedFormat === "") {

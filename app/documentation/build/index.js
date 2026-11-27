@@ -414,6 +414,13 @@ const handle =
           ),
           { width: 48 }
         );
+        if (basename(path) === "0.png") {
+          await generateThumbnail(
+            join(SOURCE_DIRECTORY, path),
+            join(DESTINATION_DIRECTORY, dirname(path), "0-card.webp"),
+            { width: 840 }
+          );
+        }
       } else if (path.endsWith(".html") && !path.includes("dashboard/")) {
         await buildHTML(path);
       } else if (path.endsWith(".css") && !initial) {

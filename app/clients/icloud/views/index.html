@@ -1,4 +1,3 @@
-{{> message}}
 
 <div class="live-updates" data-throttle="300">
 
@@ -101,7 +100,7 @@
             <input type="text" name="sharingLink" aria-label="iCloud folder link" placeholder="icloud.com/iclouddrive/…" value="{{setup.sharingLink}}" autocomplete="off" spellcheck="false">
             <div class="buttons">
               <button type="submit">Connect folder</button>
-              {{^blog.client}}<a href="{{{dashboardBase}}}/client">Cancel</a>{{/blog.client}}
+              {{^blog.client}}<a href="{{{dashboardBase}}}/sync">Cancel</a>{{/blog.client}}
               {{#blog.client}}<button type="submit" name="cancel" value="true">Cancel</button>{{/blog.client}}
             </div>
           </form>
@@ -168,7 +167,7 @@
   line where it will be once setup is done, with a bar while files are
   copied }}
 {{#setup.working}}
-<a class="line sync-status-line{{#setup.joining}} icloud-join-status{{/setup.joining}}" href="{{{dashboardBase}}}/client/activity">
+<a class="line sync-status-line{{#setup.joining}} icloud-join-status{{/setup.joining}}" href="{{{dashboardBase}}}/activity">
   <span class="label">Status</span>
   <span class="center sync-status-center icloud-progress">
     {{> sync-status}}
@@ -187,7 +186,7 @@
       <input type="hidden" name="_csrf" value="{{csrftoken}}">
       <div class="buttons">
         <button type="submit">Try again</button>
-        <a href="{{{dashboardBase}}}/client/activity">View activity</a>
+        <a href="{{{dashboardBase}}}/activity">View activity</a>
       </div>
     </form>
     <!-- Keeps the page listening for status messages, so it follows a retry -->

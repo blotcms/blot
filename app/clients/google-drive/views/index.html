@@ -86,7 +86,7 @@
 </div>
 
 {{! The status line where it will be once setup is done }}
-<a class="line sync-status-line" href="{{{dashboardBase}}}/client/activity">
+<a class="line sync-status-line" href="{{{dashboardBase}}}/activity">
   <span class="label">Status</span>
   <span class="center sync-status-center">
     {{#setup.copying}}{{> sync-status}}{{/setup.copying}}
@@ -110,7 +110,6 @@
 {{/setup.inProgress}}
 
 </div>
-<br><br>
 {{/account}}
 
 <style>

@@ -8,6 +8,9 @@ var dictionary = {
 document
   .querySelectorAll("section.multilingual")
   .forEach(function (block, blockIndex) {
+    // Rendered with its tabs already (the dashboard's file page)
+    if (block.querySelector(".lang-tabs")) return;
+
     // Create a <ul> element to hold the language tabs
     var tabs = document.createElement("ul");
     tabs.classList.add("lang-tabs");
@@ -17,7 +20,7 @@ document
 
     // Iterate over each <pre> element within the block
     block.querySelectorAll("pre").forEach(function (code, i) {
-      var lang = code.getAttribute("lang");
+      var lang = code.getAttribute("data-lang") || code.getAttribute("lang");
 
       // If it's not the first code block, hide it
       if (i > 0) {
@@ -31,13 +34,18 @@ document
       var tab = document.createElement("li");
 
       // Generate a unique ID for the code block
-      var id = lang + "-" + blockIndex + "-" + i;
+      // (letters, digits and dashes only, so it is safe in the tab's href)
+      var id =
+        String(lang).replace(/[^a-z0-9-]/gi, "") + "-" + blockIndex + "-" + i;
 
       // Get the display name for the language from the dictionary, or use the language code itself if not found
       var text = dictionary[lang] || lang;
 
       // Set the tab's HTML content
-      tab.innerHTML = '<a href="#' + id + '">' + text + "</a>";
+      var link = document.createElement("a");
+      link.href = "#" + id;
+      link.textContent = text;
+      tab.appendChild(link);
 
       // Append the tab to the tabs list
       tabs.appendChild(tab);

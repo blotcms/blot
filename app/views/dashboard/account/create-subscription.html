@@ -1,3 +1,4 @@
+<header class="page-header"><div class="page-header__text"><h1 class="page-header__title">{{title}}</h1></div></header>
 <a href="" class="mess error" style="display:none">
          {{text}}
          <span class="link">Dismiss</span>
@@ -8,7 +9,7 @@
 
 <form id="payment-form" data-stripe-key="{{stripe_key}}" method="POST" style="max-width: 500px" id="payment-form">
 
-  <p style="margin-top:0;padding:11px 0 0;margin-bottom:0">Would you like to pay <span class="yellow" style="background:#fff0a8">{{price}} per {{interval}}</span> to activate your subscription? If you have any questions please <a href="/support">contact support</a>.</p>
+  <p class="payment-intro">Would you like to pay <span class="price-highlight">{{price}} per {{interval}}</span> to activate your subscription? If you have any questions please <a href="/support">contact support</a>.</p>
 
   <input type="hidden" name="_csrf" value="{{csrftoken}}">
 

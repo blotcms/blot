@@ -15,7 +15,43 @@ describe("readOnly", function () {
   });
 
   describe("status", function () {
+    const client = require("models/client");
+
     it("is null when writes are allowed", async function () {
+      expect(await readOnly.status()).toBe(null);
+    });
+
+    it("is null once the stored expiry has passed, before Redis expires the key", async function () {
+      await client.set(
+        readOnly.KEY,
+        JSON.stringify({ reason: "late", since: 1, expiresAt: Date.now() - 1 }),
+        { EX: 100 }
+      );
+
+      expect(await readOnly.status()).toBe(null);
+    });
+
+    it("still reports a freeze written without an expiry time", async function () {
+      await client.set(
+        readOnly.KEY,
+        JSON.stringify({ reason: "older", since: 1 }),
+        { EX: 100 }
+      );
+
+      expect(await readOnly.status()).toEqual({
+        reason: "older",
+        since: 1,
+        expiresInSeconds: null,
+      });
+    });
+
+    it("sees a freeze and its end straight away despite the client-side cache", async function () {
+      expect(await readOnly.status()).toBe(null);
+
+      await readOnly.enable({ reason: "cached", ttl: 100 });
+      expect((await readOnly.status()).reason).toBe("cached");
+
+      await readOnly.disable();
       expect(await readOnly.status()).toBe(null);
     });
   });

@@ -1,6 +1,6 @@
 <style>
     
-  .imports {padding: 24px 0 24px 0;display: flex;flex-wrap: wrap;list-style: none;gap: 1em;max-width: none;border-top: 1px solid var(--border-color);}
+  .imports {padding: 0 0 var(--space-5);display: flex;flex-wrap: wrap;list-style: none;gap: 1em;max-width: none;}
   .imports li {flex-basis: 32%;}
   .imports li a {
     padding:11px 20px;
@@ -31,14 +31,17 @@
   </style>
   
   
-  {{> close-button}}
 
-<div class="dashboard-form-panel" data-import-base="{{{importBase}}}" style="border:1px solid var(--border-color);border-radius: var(--border-radius);padding:20px">
-        <h1>Import</h1>
+<div class="dashboard-form-panel" data-import-base="{{{importBase}}}">
+        <header class="page-header">
+          <div class="page-header__text">
+            <h1 class="page-header__title">Import</h1>
+          </div>
+        </header>
 
 {{#imports.length}}
 <div class="live-updates">
-<p><span style="color:var(--medium-text-color);font-size:var(--small-font-size)">Your imports</strong></p>
+<p class="dashboard-form-panel__label">Your imports</p>
 
 <style type="text/css">
   .import-list {list-style: none;padding: 0;margin: 0;max-width: none;}
@@ -167,7 +170,7 @@
 
 
 {{#imports.length}}
-<p><span style="color:var(--medium-text-color);font-size:var(--small-font-size)">Start import</strong></p>
+<p class="dashboard-form-panel__label">Start import</p>
   {{/imports.length}}
 
 <ul class="imports">

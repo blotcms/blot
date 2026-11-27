@@ -103,6 +103,50 @@ describe("entries", function () {
     });
   });
 
+  describe("list totals and ordering", function () {
+    it("counts the entries in a named list", async function () {
+      const blogID = this.blog.id;
+
+      expect(await Entries.getListTotal(blogID, "drafts")).toEqual(0);
+
+      await Entry.set(blogID, "/a.txt", buildEntry("/a.txt", { draft: true }));
+      await Entry.set(blogID, "/b.txt", buildEntry("/b.txt", { draft: true }));
+      await Entry.set(blogID, "/c.txt", buildEntry("/c.txt"));
+
+      expect(await Entries.getListTotal(blogID, "drafts")).toEqual(2);
+      expect(await Entries.getListTotal(blogID, "entries")).toEqual(1);
+    });
+
+    it("lists the oldest entries first when ascending", async function () {
+      const blogID = this.blog.id;
+      // In the past, so the entries are published rather than scheduled.
+      const now = Date.now() - 24 * 60 * 60 * 1000;
+
+      for (const [path, offset] of [
+        ["/one.txt", 3000],
+        ["/two.txt", 2000],
+        ["/three.txt", 1000],
+      ]) {
+        await Entry.set(
+          blogID,
+          path,
+          buildEntry(path, { dateStamp: now + offset, created: now + offset })
+        );
+      }
+
+      const newestFirst = await Entries.getListIDs(blogID, "entries", {
+        first: 2,
+      });
+      const oldestFirst = await Entries.getListIDs(blogID, "entries", {
+        first: 2,
+        ascending: true,
+      });
+
+      expect(newestFirst).toEqual(["/one.txt", "/two.txt"]);
+      expect(oldestFirst).toEqual(["/three.txt", "/two.txt"]);
+    });
+  });
+
   describe("entry list membership transitions", function () {
     it("keeps list and lex memberships in sync across state transitions", async function () {
       const blogID = this.blog.id;

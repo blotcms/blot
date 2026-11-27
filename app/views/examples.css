@@ -25,8 +25,17 @@ margin: 0;font-size:16px
 
   /* fade in the children of id="featured" one after the other */
   #featured li {
-    opacity: 0;
-    animation: fadeIn 0.5s ease-in-out forwards;
+    animation: discover-entry 0.5s ease-in-out backwards;
+  }
+
+  @keyframes discover-entry {
+    from { opacity: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #featured li {
+      animation-name: none;
+    }
   }
 
   #featured li:nth-child(1) {

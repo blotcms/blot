@@ -1,5 +1,11 @@
-<br>
-<h1>Upload a template</h1>
+<div class="template-overview template-create">
+<header class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">Create a template</h1>
+  </div>
+</header>
+
+<h2 class="template-create__heading">Upload a template</h2>
 
 <div
   class="template-upload"
@@ -66,21 +72,29 @@
   </div>
 </div>
 
-<br>
-<h1>Your templates</h1>
-
-<div class="template-grid">
+<h2 class="template-create__heading">Start from a copy</h2>
+{{^yourTemplates.length}}<p class="template-create__note">Copy one of Blot’s templates to make your own.</p>{{/yourTemplates.length}}
+<ul class="template-create__list">
 {{#yourTemplates}}
-{{> duplicate-form}}
+  <li class="template-create__item">
+    <form action="{{{editURL}}}/duplicate" method="post">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}" />
+      <img class="template-create__thumb" alt="" loading="lazy" src="{{thumbnailURL}}" />
+      <span class="template-create__name">{{name}}</span>
+      <span class="template-overview__tag">Yours</span>
+      <button type="submit" class="btn btn-sm" aria-label="Copy {{name}}">Copy</button>
+    </form>
+  </li>
 {{/yourTemplates}}
-</div>
-
-<br><br>
-<h1>Default templates</h1>
-
-<div class="template-grid">
 {{#blotTemplates}}
-{{> duplicate-form}}
+  <li class="template-create__item">
+    <form action="{{{editURL}}}/duplicate" method="post">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}" />
+      <img class="template-create__thumb" alt="" loading="lazy" src="{{thumbnailURL}}" />
+      <span class="template-create__name">{{name}}</span>
+      <button type="submit" class="btn btn-sm" aria-label="Copy {{name}}">Copy</button>
+    </form>
+  </li>
 {{/blotTemplates}}
+</ul>
 </div>
-<br><br>

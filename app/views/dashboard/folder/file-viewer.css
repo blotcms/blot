@@ -1,7 +1,8 @@
 
   table.file-stat {
     margin: 0;
-    max-width: none;width: 100%;font-size: 14px;
+    max-width: none;
+    font-size: var(--text-md);
     display: table;
     width: 100%;
   }
@@ -9,14 +10,14 @@
 
   table.file-stat-nested {
     width: 100%;
-    margin: 6px 0;
+    margin: var(--space-2) 0;
     border-collapse: collapse;
   }
 
    table.file-stat table.file-stat-nested td {
-    padding: 4px 8px;
+    padding: var(--space-1) var(--space-2);
     border: 1px solid var(--border-color);
-    font-size: 13px;
+    font-size: var(--text-sm);
   }
 
   table.file-stat table.file-stat-nested tr:last-child td {
@@ -35,19 +36,19 @@
 
 
   table.file-stat .file-thumbnail {
-    max-width: 72px;max-height: 72px;width: auto;margin:6px 0;
-        height: auto;vertical-align: middle;box-shadow: 0 0 1px rgba(0,0,0,0.5);
-  border: 0.3rem solid #ffffff;
+    max-width: 72px;max-height: 72px;width: auto;margin: var(--space-2) 0;
+        height: auto;vertical-align: middle;box-shadow: var(--shadow-sm);
+  border: var(--space-1) solid var(--background-color);
   }
 
   .file-stat-empty {
-    color: #c4c7cf;
+    color: var(--light-text-color);
   }
   
   table.file-stat td {
     vertical-align: top;
-    padding: 4px 0;
-    border-bottom: 1px solid #f4f4f5;
+    padding: var(--space-1) 0;
+    border-bottom: 1px solid var(--border-color);
   }
   
   table.file-stat tr:last-child td {
@@ -55,26 +56,26 @@
   }
 
   table.file-stat tr {
-    transition: background-color 0.2s;
-    background-color: none;
+    transition: background-color 150ms ease;
   }
+
   table.file-stat tr:hover {
-    background-color: var(--light-background-color);
+    background-color: var(--hover-background-color);
   }
 
   table.file-stat td:first-child {
     color: var(--light-text-color);
-    font-size: 13px;
-    padding-right: 20px;
-    padding-top: 7px;
+    font-size: var(--text-sm);
+    padding-right: var(--space-5);
+    padding-top: var(--space-2);
     width: 120px;
   }
   
   
   .publishing-steps {
-    font-size: 14px;
+    font-size: var(--text-md);
     margin: 0;
-    padding: 12px 60px;
+    padding: var(--space-3) var(--space-7);
     color: var(--light-text-color);
     position: relative;
     z-index: 2;
@@ -87,9 +88,9 @@
 
   .publishing-steps b {
     color: var(--text-color);
-    font-weight: 600;
+    font-weight: var(--weight-semibold);
     display: block;
-    margin-bottom: 6px;
+    margin-bottom: var(--space-2);
   }
 
   .publishing-steps p {
@@ -100,8 +101,8 @@
     position: relative;
     display: flex;
     align-items: baseline;
-    gap: 0.5em;
-    margin: 14px 0;
+    gap: var(--space-2);
+    margin: var(--space-3) 0;
   }
 
   .publishing-steps .publishing-step > b {
@@ -111,17 +112,22 @@
 
   .publishing-steps .publishing-step details {
     min-width: 0;
-    margin-left: 0.5rem;
+    margin-left: var(--space-2);
   }
 
   .publishing-steps .publishing-step summary {
     cursor: pointer;
     list-style: none;
-    transition: color 0.15s ease;
+    transition: color 150ms ease;
   }
 
   .publishing-steps .publishing-step summary:hover {
     color: var(--text-color);
+  }
+
+  .publishing-steps .publishing-step summary:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
   }
 
   .publishing-steps .publishing-step summary span {
@@ -137,19 +143,19 @@
   }
 
   .publishing-steps .publishing-step details p {
-    margin: 6px 0 0;
+    margin: var(--space-2) 0 0;
   }
 
   .publishing-steps i {
     position: absolute;
     border-radius: 1em;
     left: -2em;
-    top:.41em;
+    top: .41em;
     width: 1em;
     height: 1em;z-index: 3;
-    font-size: 12px;
+    font-size: var(--text-xs);
     color: var(--text-color);
-    background-color: #fff;
+    background-color: var(--background-color);
   }
 
   .publishing-steps i span {
@@ -158,12 +164,12 @@
   left: 0;
   right: 0;
   bottom: 0;
-  font-size: 0.97em;
+  font-size: inherit;
   }
 
   table.file-stat td {position: relative;}
   table.file-stat td details {
-    font-size: 14px;
+    font-size: var(--text-md);
     color: var(--medium-text-color);
   }
   table.file-stat td details summary {
@@ -171,19 +177,27 @@
     cursor: pointer;
     user-select: none;
     top: 0.4em;
-    font-size: 13px;
+    font-size: var(--text-sm);
     right: 0;
     color: var(--light-text-color);
-    transition: color 0.15s ease;
-
+    transition: color 150ms ease;
   }
 
   table.file-stat td details summary:hover {
-    color: var(--text-color);
+    color: var(--accent-hover-color);
+  }
+
+  table.file-stat td details summary:active {
+    color: var(--accent-active-color);
+  }
+
+  table.file-stat td details summary:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
   }
 
   table.file-stat td details summary span {
-    margin-right: 0.15em;
+    margin-right: var(--space-0);
     transition: color 0.15s ease;
   }
 
@@ -193,26 +207,36 @@
 
 
 table.file-stat td details ::-webkit-details-marker {
-  display:none;
+  display: none;
 }
 
 a.template-button.file-helper {
   display: inline-block;
   background-color: transparent;
-  border: 1px solid #eeeeec;
+  border: 1px solid var(--border-color);
   position: static;
-  margin: -12px 0 12px;
-  transition: background-color 0.2s, color 0.15s ease;
+  margin: calc(-1 * var(--space-3)) 0 var(--space-3);
+  transition: background-color 150ms ease, color 150ms ease;
 }
 
 a.template-button.file-helper:hover {
-  background-color: var(--light-background-color);
-  color: var(--accent-color);
+  background-color: var(--hover-background-color);
+  color: var(--accent-hover-color);
+}
+
+a.template-button.file-helper:active {
+  background-color: var(--active-background-color);
+  color: var(--accent-active-color);
+}
+
+a.template-button.file-helper:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
 }
 
 a.template-button.file-helper span {
-  margin-left: 0.5em;
-  transition: color 0.15s ease;
+  margin-left: var(--space-2);
+  transition: color 150ms ease;
 }
 
 a.template-button.file-helper:hover span {
@@ -220,20 +244,20 @@ a.template-button.file-helper:hover span {
 }
 
 .file-info {
-  position:relative;z-index: 5;border:1px solid var(--border-color);padding-bottom: 12px;border-radius: var(--border-radius);padding:36px;
+  position: relative;z-index: 5;border: 1px solid var(--border-color);border-radius: var(--radius-lg);padding: var(--space-6);
 }
 
   
 .file-info h1,
 .entry-info h1 {
   position: relative;
-  max-width: none;margin:0;padding:0;margin: 0 0 24px;
+  max-width: none;padding: 0;margin: 0 0 var(--space-5);
 }
 
 
 .file-info h1 span,
 .entry-info h1 span {
-  margin-right: 0.5em;
+  margin-right: var(--space-2);
 }
 
 .entry-info h1 a {
@@ -250,10 +274,10 @@ a.template-button.file-helper:hover span {
   height: 0; 
   border-left: 6px solid transparent;
   border-right: 6px solid transparent;
-  border-top:6px solid var(--background-color);
+  border-top: 6px solid var(--background-color);
   position: absolute;
   bottom: -5px;
-  left: 2.17rem;
+  left: var(--space-6);
   content: "";
   z-index: 4;
 }
@@ -271,7 +295,7 @@ a.template-button.file-helper:hover span {
 
 
 .entry-info {
-  position:relative;z-index: 5;border-radius: var(--border-radius);padding:36px;border:1px solid var(--border-color);
+  position: relative;z-index: 5;border-radius: var(--radius-lg);padding: var(--space-6);border: 1px solid var(--border-color);
 }
 
 .entry-info:after {
@@ -296,7 +320,7 @@ a.template-button.file-helper:hover span {
               position: relative;
               max-width: 600px;
 
-              margin: 18px 0;
+              margin: var(--space-4) 0;
               border: 1px solid var(--border-color);
               border-radius: var(--border-radius);
               overflow: hidden;
@@ -304,9 +328,9 @@ a.template-button.file-helper:hover span {
 
             .multilingual pre {
               margin: 0;
-              padding: 9px;
+              padding: var(--space-2);
               overflow: hidden;
-              font-size: 13px;
+              font-size: var(--text-sm);
               color: var(--text-color);
               display: none;
             }
@@ -314,10 +338,10 @@ a.template-button.file-helper:hover span {
             .lang-tabs {
               list-style: none;
               padding: 0;
-              background-color: #f6f7f9;
+              background-color: var(--surface-muted-color);
               margin: 0;
               display: flex;
-              font-size: 12px;
+              font-size: var(--text-xs);
               position: relative;
               max-width: none;
             }
@@ -329,34 +353,51 @@ a.template-button.file-helper:hover span {
 
             .lang-tabs a {
               display: block;
-              padding: 4px 12px;
+              padding: var(--space-1) var(--space-3);
               color: var(--accent-color);
               text-decoration: none;
+              transition: background-color 150ms ease, color 150ms ease;
+            }
+
+            .lang-tabs a:hover {
+              background-color: var(--surface-strong-color);
+              color: var(--accent-hover-color);
+            }
+
+            .lang-tabs a:active {
+              background-color: var(--border-strong-color);
+              color: var(--accent-active-color);
+            }
+
+            .lang-tabs a:focus-visible {
+              outline: 2px solid var(--accent-color);
+              outline-offset: -2px;
             }
 
             .lang-tabs a.active {
-              background-color: var(--light-background-color);
+              background-color: var(--selected-background-color);
+              color: var(--text-color);
             }
 
             .multilingual button  {
               position: absolute;
-              top:0;
+              top: 0;
               right: 0;
               background-color: var(--background-color);
-              padding: 12px;
+              padding: var(--space-3);
               overflow: visible;
-              box-shadow: -10px 0 10px var(--background-color);
+              box-shadow: calc(-1 * var(--space-3)) 0 var(--space-3) var(--background-color);
             }
 
 .entry-info td pre {
-  margin: 6px 6rem 6px 0;
+  margin: var(--space-2) calc(var(--space-7) * 2) var(--space-2) 0;
   text-wrap: wrap;
-  border: 1px solid #eeeeec;
-  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
   overflow-x: auto;
-  background: #fbfbfb;
-  font-size: .9em;
-  padding: 3px 6px;
+  background: var(--surface-muted-color);
+  font-size: var(--text-sm);
+  padding: var(--space-1) var(--space-2);
 }
 
 /* Folder post view: the source files are listed at the top of .file-info with
@@ -364,7 +405,7 @@ a.template-button.file-helper:hover span {
    reuses .directory-list, so this only pulls it flush with the card edges and
    adds a rule between it and the heading above. */
 .folder-post-sources {
-  margin: 4px -36px 0;
+  margin: var(--space-1) calc(-1 * var(--space-6)) 0;
   border-top: 1px solid var(--border-color);
 }
 
@@ -374,38 +415,38 @@ a.template-button.file-helper:hover span {
 
 .folder-post-source-list th:first-child,
 .folder-post-source-list td:first-child {
-  padding-left: 36px;
+  padding-left: var(--space-6);
 }
 
 .folder-post-source-list th:last-child,
 .folder-post-source-list td:last-child {
-  padding-right: 36px;
+  padding-right: var(--space-6);
 }
 
 .folder-post-source-list tr td:first-child:after {
-  left: 36px;
+  left: var(--space-6);
 }
 
 .folder-post-source-list tr td:last-child:after {
-  right: 36px;
+  right: var(--space-6);
 }
 
 .folder-post-source.missing .file-name {
   text-decoration: line-through;
-  color: #c0392b;
+  color: var(--danger-color);
 }
 
 .folder-post-source .file-missing-note {
   display: block;
-  font-size: 12px;
-  color: #c0392b;
-  margin-top: 2px;
+  font-size: var(--text-xs);
+  color: var(--danger-color);
+  margin-top: var(--space-0);
 }
 
 .folder-post-sources .folder-post-more {
   margin: 0;
-  padding: 8px 36px 4px;
-  border-top: 1px solid #f4f4f5;
+  padding: var(--space-2) var(--space-6) var(--space-1);
+  border-top: 1px solid var(--border-color);
 }
 
 .folder-post-sources .folder-post-more[open] {
@@ -423,26 +464,40 @@ a.template-button.file-helper:hover span {
    aligned with the other values in the value column. */
 .folder-post-file-list {
   list-style: none;
-  margin: 3px 0 0;
+  margin: var(--space-1) 0 0;
   padding: 0;
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .folder-post-file-list li {
   display: flex;
   align-items: center;
-  gap: 0.5em;
+  gap: var(--space-2);
   margin: 0;
-  padding: 3px 0;
+  padding: var(--space-1) 0;
 }
 
 .folder-post-file-list a {
   display: inline-flex;
   align-items: center;
-  gap: 0.4em;
+  gap: var(--space-1);
   min-width: 0;
   text-decoration: none;
   color: var(--text-color);
+  transition: color 150ms ease;
+}
+
+.folder-post-file-list a:hover {
+  color: var(--accent-hover-color);
+}
+
+.folder-post-file-list a:active {
+  color: var(--accent-active-color);
+}
+
+.folder-post-file-list a:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
 }
 
 .folder-post-file-list .icon-file-check {
@@ -464,17 +519,17 @@ a.template-button.file-helper:hover span {
 
 .folder-post-file-list li.missing .file-name {
   text-decoration: line-through;
-  color: #c0392b;
+  color: var(--danger-color);
 }
 
 .folder-post-file-list .file-missing-note {
-  color: #c0392b;
+  color: var(--danger-color);
 }
 
 /* The "Show all" disclosure lives inside a file-stat value cell, whose
    `td details summary` rule would otherwise absolutely-position it. */
 .file-stat td .folder-post-more {
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .file-stat td .folder-post-more > summary {
@@ -489,14 +544,28 @@ a.template-button.file-helper:hover span {
 }
 
 .folder-post-more {
-  margin-top: 12px;
+  margin-top: var(--space-3);
 }
 
 .folder-post-more > summary {
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--accent-color);
   list-style: none;
+  transition: color 150ms ease;
+}
+
+.folder-post-more > summary:hover {
+  color: var(--accent-hover-color);
+}
+
+.folder-post-more > summary:active {
+  color: var(--accent-active-color);
+}
+
+.folder-post-more > summary:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
 }
 
 .folder-post-more > summary::-webkit-details-marker {
@@ -504,5 +573,39 @@ a.template-button.file-helper:hover span {
 }
 
 .folder-post-more[open] > summary {
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
+}
+
+/* Values keep clear of the "Explain" toggle positioned at their top right */
+table.file-stat td:last-child {
+  padding-right: 6.5em;
+}
+
+/* On phones each label sits above its value */
+@media screen and (max-width: 600px) {
+  table.file-stat,
+  table.file-stat > tbody,
+  table.file-stat > tbody > tr,
+  table.file-stat > tbody > tr > td {
+    display: block;
+    width: auto;
+  }
+
+  table.file-stat > tbody > tr > td:first-child {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+
+  /* "Explain" moves up to the label's line, so the value gets the width */
+  table.file-stat > tbody > tr {
+    position: relative;
+  }
+
+  table.file-stat > tbody > tr > td {
+    position: static;
+  }
+
+  table.file-stat > tbody > tr > td:last-child {
+    padding-right: 0;
+  }
 }

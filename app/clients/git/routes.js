@@ -107,7 +107,7 @@ dashboard.post("/create", async function (req, res, next) {
       console.log(clfdate() + " Git: User cancelled creation of repo");
 
       if (!req.blog.client) {
-        return res.redirect(res.locals.dashboardBase + "/client");
+        return res.redirect(res.locals.dashboardBase + "/sync");
       }
 
       await disconnect(req.blog.id);

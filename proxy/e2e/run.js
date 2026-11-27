@@ -229,7 +229,7 @@ async function waitForUpstream(timeoutMs = 60000) {
   const pages = [
     ["/sites", handle],
     [`/sites/${handle}`, handle],
-    [`/sites/${handle}/settings`, "Markdown features"],
+    [`/sites/${handle}/settings`, "Writing and formatting"],
     [`/sites/${handle}/title`, 'name="title"'],
     [`/sites/${handle}/client`, ""],
     [`/sites/${handle}/template`, ""],

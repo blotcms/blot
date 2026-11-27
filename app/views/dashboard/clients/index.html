@@ -1,12 +1,11 @@
-{{> close-button}}
 
-<form method='post' class="dashboard-form" style="padding: 0;margin: 0;">
+<form method='post' class="dashboard-form dashboard-form--flush">
   <style type="text/css">
 
 button[name="client"] {
   background: none;max-width:475px;margin-bottom: 0;
-  padding: 10px 0;border:none;border-top:1px solid var(--border-color);
-  text-align: left;display: block;width: 100%;color:var(--accent-color);padding: 12px;font-size:var(--font-size)
+  border:none;border-top:1px solid var(--border-color);
+  text-align: left;display: flex;align-items: center;justify-content: space-between;width: 100%;color:var(--accent-color);padding: var(--space-3);font-size:var(--text-base);transition: background-color 150ms ease
 }
 button[name="client"] b {
   display: block;
@@ -20,19 +19,21 @@ button[name="client"]:hover span.icon-chevron {
   color: var(--accent-color);
 }
 
-button[name="client"]:hover {background: var(--light-background-color);cursor: pointer;}
+button[name="client"]:hover {background: var(--hover-background-color);cursor: pointer;}
+  button[name="client"]:active {background: var(--active-background-color);}
+  button[name="client"]:focus-visible {outline: 2px solid var(--accent-color);outline-offset: -2px;}
 </style>
 
-  <p style="max-width: 400px;">Choose a way to sync your site’s folder. Files inside become posts and pages.</p>
+  <p class="client-intro">Choose a way to sync your site’s folder. Files inside become posts and pages.</p>
 
   <input type="hidden" name="_csrf" value="{{csrftoken}}">
 
 {{#clients}}
 
 
-  <button type="submit" name="client" value="{{name}}" style="display: flex;align-items: center;justify-content: space-between;">
+  <button type="submit" name="client" value="{{name}}">
     <span>
-    <img width="16" height="16" src="{{#cdn}}/images/sync/{{name}}.svg{{/cdn}}" style="position: relative;top:2px;margin-right: 4px;" />
+    <img class="client-icon" alt="" width="16" height="16" src="{{#cdn}}/images/sync/{{name}}.svg{{/cdn}}" />
    {{display_name}}
     </span>
 

@@ -36,11 +36,11 @@ module.exports = async function (blog, path) {
     const aggregatedLookupPath = multiInfo ? multiInfo.entryPath : null;
 
     Promise.all([
-      // A failed read is the same as no flags
-      folder
-        .stat(blogID, path)
-        .then((stat) => stat.flags || [])
-        .catch(() => []),
+      // The file's flags (models/file/flags.js); a failed stat has none
+      folder.stat(blogID, path).then(
+        (stat) => (stat && stat.flags) || [],
+        () => []
+      ),
       // A failed read is the same as no entry
       Entry.get(blogID, path).catch(() => undefined),
       !aggregatedLookupPath || aggregatedLookupPath === path
@@ -69,10 +69,6 @@ module.exports = async function (blog, path) {
         let ignored = {};
 
         if (!entry) {
-          // Why the file is not a post. Only its size has to be stored: the
-          // rest follows from its path and the blog's converters.
-          const tooLarge = flags.some((flag) => flag.code === "POST_TOO_LARGE");
-
           if (path.toLowerCase().indexOf("/templates/") === 0) {
             ignored.templateFile = true;
           } else if (
@@ -86,6 +82,8 @@ module.exports = async function (blog, path) {
             ignored.underscorePath = true;
           } else if (basename(path)[0] === "_") {
             ignored.underscoreName = true;
+            // The build turns down a file no enabled converter reads, so that
+            // is worked out here rather than stored
           } else if (
             matchingConverter &&
             matchingConverter.id === "img" &&
@@ -94,7 +92,7 @@ module.exports = async function (blog, path) {
             ignored.imageConverterDisabled = true;
           } else if (!matchingConverterEnabled) {
             ignored.wrongType = true;
-          } else if (tooLarge) {
+          } else if (flags.some((flag) => flag.code === "POST_TOO_LARGE")) {
             ignored.tooLarge = true;
             ignored.postSizeLimit = postSourceSize.limitForPath(path).label;
           } else {
@@ -113,11 +111,18 @@ module.exports = async function (blog, path) {
         // a dictionary we use to display conditionally in the UI
         file.extension = {};
         file.extension = normalizeExtension(path);
+        file.embeds = embeds(path, file.extension);
         file.converter = matchingConverter || null;
         file.converterEnabled = matchingConverterEnabled;
 
         file.entry = entry;
         file.ignored = ignored;
+        // These paths are never served, so their URL is shown as text
+        file.notServed = !!(
+          ignored.templateFile ||
+          ignored.underscorePath ||
+          ignored.underscoreName
+        );
 
         if (entry) {
           // Replace with case-preserving
@@ -156,16 +161,16 @@ module.exports = async function (blog, path) {
             entry.url = "/draft/view" + entry.path;
           }
 
-          entry.backlinks = entry.backlinks.map((backlink) => {
-            return { backlink };
+          entry.backlinks = entry.backlinks.map((backlink, i, arr) => {
+            return { backlink, last: i === arr.length - 1 };
           });
 
           entry.dependencies = entry.dependencies
             .filter((dependency) => {
               return !isSyntheticDependency(dependency);
             })
-            .map((dependency) => {
-              return { dependency };
+            .map((dependency, i, arr) => {
+              return { dependency, last: i === arr.length - 1 };
             });
 
           entry.internalLinks = entry.internalLinks.map((internalLink) => {
@@ -253,6 +258,73 @@ function kind(path, entry, multiInfo) {
   debug(path, extension, kind);
 
   return kind;
+}
+
+// The "how to embed / link" snippets a file page offers, in Markdown and
+// HTML, by kind of file
+const EMBEDS = {
+  pdf: [
+    [
+      "Embed this PDF in another post:",
+      (p) => `<embed src="${p}" type="application/pdf">`,
+      (p) => `<embed src="${p}" type="application/pdf">`,
+    ],
+    [
+      "Link to this PDF from another post:",
+      (p) => `[Download PDF](${p})`,
+      (p) => `<a href="${p}">Download PDF</a>`,
+    ],
+  ],
+  image: [
+    [
+      "How to embed this image:",
+      (p) => `![Image](${p})`,
+      (p) => `<img src="${p}">`,
+    ],
+    [
+      "How to link to this image:",
+      (p) => `[View image](${p})`,
+      (p) => `<a href="${p}">View image</a>`,
+    ],
+  ],
+  video: [
+    [
+      "How to embed this video:",
+      (p) => `![Video](${p})`,
+      (p) => `<video src="${p}">`,
+    ],
+    [
+      "How to link to this video:",
+      (p) => `[View video](${p})`,
+      (p) => `<a href="${p}">View video</a>`,
+    ],
+  ],
+  audio: [
+    [
+      "How to embed this audio:",
+      (p) => `![Audio](${p})`,
+      (p) => `<audio controls src="${p}">`,
+    ],
+    [
+      "How to link to this audio:",
+      (p) => `[Listen to audio](${p})`,
+      (p) => `<a href="${p}">Listen to audio</a>`,
+    ],
+  ],
+};
+
+// The snippets for a file, ready to render with their Markdown / HTML tabs
+// (folder/file.html), so the tabs are in the first paint rather than built by
+// js/multi-lingual-code.js
+function embeds(path, extension) {
+  const key = extension.pdf ? "pdf" : Object.keys(extension.category)[0];
+  return (EMBEDS[key] || []).map(([label, markdown, html], i) => ({
+    label,
+    markdown: markdown(path),
+    html: html(path),
+    markdownId: "markdown-" + i + "-0",
+    htmlId: "html-" + i + "-1",
+  }));
 }
 
 // should return a lowercase, trimmed extension

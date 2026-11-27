@@ -115,7 +115,7 @@ async function page(req, res, next) {
     res.locals.discover = {
       posts,
       next: more ? "/discover?before=" + more : "",
-      // The first few; "See all" links to /examples for the rest
+      // The first few; "See all" links to /discover/people for the rest
       sites,
     };
 

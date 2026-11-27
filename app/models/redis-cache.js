@@ -12,6 +12,7 @@ const CLASSES = [
   ["view", /^template:[^:]+:[^:]+:view:/],
   ["views", /^template:[^:]+:[^:]+:all_views$/],
   ["session", /^sess:/],
+  ["readonly", /^blot:read-only$/],
   ["user", /^user:[^:]+:info$/],
   ["url", /^blog:[^:]+:url:/],
   ["entry", /^blog:[^:]+:entry:/],
@@ -24,6 +25,9 @@ const CLASSES = [
 // Template views and their lists are read on every fullView fill (several
 // round trips, one after another, on the request that misses), written only
 // when a template is built, and named by template files, never by requests.
+// The read-only freeze (helper/readOnly) is one key, read by every dashboard
+// page and almost always missing; Redis tracks a missing key too, so "not
+// frozen" is served locally until an operator sets it.
 // Keys named after a request path (entries, entry and template URLs,
 // redirects) are left out: crawlers and scanners would flood the cache and
 // evict these, and Redis tracks every key read, even a missing one, until it
@@ -39,6 +43,7 @@ const ALLOWED = new Set([
   "views",
   "session",
   "user",
+  "readonly",
 ]);
 
 // Classes with their own bounded share of the cache, each evicting its own

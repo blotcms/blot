@@ -10,6 +10,8 @@ var MODEL = {
   subscription: "object",
   paypal: "object",
   paymentMethods: "array",
+  // When paymentMethods was last read from Stripe (0: never)
+  paymentMethodsSyncedAt: "number",
 };
 
 module.exports = MODEL;

@@ -6,13 +6,11 @@ var stripe = require("stripe")(config.stripe.secret);
 var email = require("helper/email");
 var subscriptionLifecycle = require("models/user/subscriptionLifecycle");
 var prettyPrice = require("helper/prettyPrice");
+var checkStripeSubscription = require("./util/stripeSubscription");
 const PLAN_MAP = config.stripe.plan_map;
 
 Subscription.route("/").get(function (req, res) {
-  res.render("dashboard/account/subscription", {
-    title: "Your account",
-    monthly: req.user.isMonthly,
-  });
+  res.redirect("/sites/account");
 });
 
 Subscription.use("/delete", require("./delete"));
@@ -200,19 +198,26 @@ function determineNewPlan(req, res, next) {
   return next();
 }
 
-function requireCancelledSubscription(req, res, next) {
+async function requireCancelledSubscription(req, res, next) {
   // Only a cancelled Stripe subscription can be restarted: PayPal can't
   // reactivate a cancelled subscription. Historical PayPal data on a user
   // with a Stripe subscription doesn't matter.
-  if (
-    !req.user.isSubscribed &&
-    req.user.subscription &&
-    req.user.subscription.customer
-  ) {
-    next();
-  } else {
-    res.redirect("/account/subscription");
+  if (!req.user.subscription || !req.user.subscription.customer) {
+    return res.redirect("/account/subscription");
   }
+
+  if (!req.user.isSubscribed) return next();
+
+  // Stored as active but gone from Stripe (its cancellation webhook was
+  // missed): that can be restarted too
+  try {
+    const result = await checkStripeSubscription(req.user);
+    if (result.state === "missing") return next();
+  } catch (err) {
+    return next(err);
+  }
+
+  res.redirect("/account/subscription");
 }
 
 function requireLackOfSubscription(req, res, next) {

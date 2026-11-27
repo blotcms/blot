@@ -1,3 +1,4 @@
+<header class="page-header"><div class="page-header__text"><h1 class="page-header__title">{{title}}</h1></div></header>
 <form method="post" class="account"> 
     <input type="hidden" name="_csrf" value="{{csrftoken}}">
     <input type="hidden" name="timeZone" value="">  
@@ -11,8 +12,8 @@
   
         <div
           id="paypal-button-container"
-          data-paypal-subscription-id="{{{user.paypal.id}}}"
-          data-paypal-plan-id="{{{user.paypal.plan_id}}}"
+          data-paypal-subscription-id="{{user.paypal.id}}"
+          data-paypal-plan-id="{{user.paypal.plan_id}}"
           data-paypal-revise-quantity="{{new_quantity}}"
           data-paypal-redirect-url="/sites/account/delete-blog-paypal/update"
         ></div>

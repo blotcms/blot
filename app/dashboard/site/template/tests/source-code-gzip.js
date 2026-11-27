@@ -8,6 +8,7 @@ describe("template source editor save", function () {
   const Template = require("models/template");
   const parse = require("dashboard/util/parse");
   const csrf = require("dashboard/util/csrf");
+  const breadcrumbs = require("dashboard/util/breadcrumbs");
   const SourceCode = require("../source-code");
 
   const TOKEN = "test-csrf-token";
@@ -26,6 +27,7 @@ describe("template source editor save", function () {
     app.use(cookieParser());
     app.use(parse);
     app.use(csrf);
+    app.use(breadcrumbs);
     app.use("/source-code", (req, res, next) => {
       req.blog = this.blog;
       req.template = this.template;

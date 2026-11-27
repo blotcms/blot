@@ -1,6 +1,7 @@
 const ajax = require("../js/ajax.js");
 const withAjax = ajax.withAjax;
 const handleAjaxSaveResponse = ajax.handleAjaxSaveResponse;
+const createDebouncedSave = require("../js/debounced-save");
 const getFontPicker = require("./font-picker");
 
 const picker = getFontPicker();
@@ -21,9 +22,11 @@ const submitUpdate = (form, name, value) => {
     })
   );
 
-  fetch(withAjax(window.location.href), { method: "post", body }).then(
-    handleAjaxSaveResponse
-  );
+  return fetch(withAjax(window.location.href), {
+    method: "post",
+    body,
+    keepalive: true,
+  }).then(handleAjaxSaveResponse);
 };
 
 Array.from(document.querySelectorAll("[data-font-picker-form]")).forEach(
@@ -36,7 +39,7 @@ Array.from(document.querySelectorAll("[data-font-picker-form]")).forEach(
 
     trigger.setAttribute("aria-expanded", "false");
 
-    const openPicker = () => {
+    const openPicker = (viaKeyboard) => {
       picker.cancelHide();
       trigger.setAttribute("aria-expanded", "true");
       picker.show({
@@ -52,6 +55,7 @@ Array.from(document.querySelectorAll("[data-font-picker-form]")).forEach(
           trigger.setAttribute("aria-expanded", "false");
         },
       });
+      if (viaKeyboard) picker.focusFirst();
     };
 
     const scheduleHide = () => picker.scheduleHide();
@@ -73,7 +77,7 @@ Array.from(document.querySelectorAll("[data-font-picker-form]")).forEach(
         picker.hide();
         return;
       }
-      openPicker();
+      openPicker(true);
     });
 
     trigger.addEventListener("blur", (event) => {
@@ -90,9 +94,10 @@ Array.from(document.querySelectorAll("[data-font-picker-form]")).forEach(
     });
 
     form.querySelectorAll('input[type="number"]').forEach((input) => {
-      input.addEventListener("change", () => {
-        submitUpdate(form, input.name, input.value);
-      });
+      const scheduleSave = createDebouncedSave(form, (value) =>
+        submitUpdate(form, input.name, value)
+      );
+      input.addEventListener("change", () => scheduleSave(input.value));
     });
   }
 );

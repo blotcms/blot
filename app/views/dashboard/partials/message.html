@@ -1,21 +1,24 @@
 {{#message}}
-        {{^error}}
-        <a href="" class="success" style="display: flex;justify-content: space-between;">
-     
-     <span>{{{text}}}</span>
-     <span style="text-decoration: underline;">Dismiss</span>
-    </a>
-        {{#warnings.length}}
-        <ul class="success" style="margin-top: -1.5rem; padding-left: 2.5rem;">
-          {{#warnings}}<li>{{.}}</li>{{/warnings}}
-        </ul>
-        {{/warnings.length}}
-        {{/error}}
-        {{/message}}
+{{^error}}
+<div role="status" class="flash">
+  <p class="success flash__body">
+    <span>{{text}}</span>
+    <button type="button" class="btn btn-quiet btn-sm flash__dismiss" data-dismiss-message aria-label="Dismiss">Dismiss</button>
+  </p>
+  {{#warnings.length}}
+  <ul class="success" style="margin-top: -1.5rem; padding-left: 2.5rem;">
+    {{#warnings}}<li>{{.}}</li>{{/warnings}}
+  </ul>
+  {{/warnings.length}}
+</div>
+{{/error}}
+{{/message}}
 
-        {{#message.error}}
-        <a href="" class="error" style="display: flex;justify-content: space-between;">
-     <span>{{message.text}}</span>
-     <span >Dismiss</span>
-    </a>
-        {{/message.error}}
+{{#message.error}}
+<div role="alert" class="flash">
+  <p class="error flash__body">
+    <span>{{message.text}}</span>
+    <button type="button" class="btn btn-quiet btn-sm flash__dismiss" data-dismiss-message aria-label="Dismiss">Dismiss</button>
+  </p>
+</div>
+{{/message.error}}

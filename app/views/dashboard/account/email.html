@@ -1,11 +1,12 @@
+<header class="page-header"><div class="page-header__text"><h1 class="page-header__title">{{title}}</h1></div></header>
 <form class="dashboard-form" method="post">
 
   <input type="hidden" name="_csrf" value="{{csrftoken}}">
 
   {{> message}}
   
-  <label>Your email address:</label>  
-  <input class="noMargin" type="text" name="email" maxlength="{{maxEmailLength}}" value="{{user.email}}" autofocus placeholder=""/>
+  <label for="account-email">Your email address:</label>  
+  <input class="noMargin" id="account-email" type="text" name="email" autocomplete="email" maxlength="{{maxEmailLength}}" value="{{user.email}}" autofocus placeholder=""/>
 
   <div class="buttons">
     <button type="submit">Save email address</button>

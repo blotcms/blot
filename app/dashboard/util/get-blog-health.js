@@ -8,7 +8,9 @@ const TIMEOUT = 2000;
 // Attaches `blog.health` and, when the client is in an error state,
 // `blog.healthIssue` ({ code, label, message, since }) for templates.
 // Clients without getHealth, and any failure, are treated as healthy.
-module.exports = async function getBlogHealth(blog) {
+// Pass `frozen`, a promise for readOnly.status(), to share one check between
+// several blogs.
+module.exports = async function getBlogHealth(blog, frozen) {
   let result = health.ok();
   const client = blog.client && clients[blog.client];
 
@@ -36,10 +38,10 @@ module.exports = async function getBlogHealth(blog) {
   // than let the site look stuck. readOnly.status() counts as off when Redis
   // is unreachable, and a failure here must not break the page either.
   if (blog.client && (!result || result.state !== health.STATES.ERROR)) {
-    const frozen = await readOnly.status().catch(() => null);
-    if (frozen) {
+    const status = await (frozen || readOnly.status()).catch(() => null);
+    if (status) {
       result = health.error([
-        { code: health.CODES.SYNC_PAUSED, since: frozen.since || undefined },
+        { code: health.CODES.SYNC_PAUSED, since: status.since || undefined },
       ]);
     }
   }

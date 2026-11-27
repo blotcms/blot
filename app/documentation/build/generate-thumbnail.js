@@ -1,7 +1,7 @@
 const config = require("config");
 const sharp = require("sharp");
 const hashFile = require("helper/hashFile");
-const { join } = require("path");
+const { extname, join } = require("path");
 const fs = require("fs-extra");
 const hashString = require("helper/hash");
 const TMP_DIRECTORY = config.tmp_directory;
@@ -14,6 +14,7 @@ module.exports = async function generateThumbnail(
   if (from.includes(".mobile.")) return;
 
   const options = { width };
+  const extension = extname(to);
   const hash = await hashFile(from);
   const optionsHash = hashString(
     Object.entries(options)
@@ -22,7 +23,7 @@ module.exports = async function generateThumbnail(
   );
   const cachedFilePath = join(
     TMP_DIRECTORY,
-    `documentation-thumbs/${hash}-${optionsHash}.jpg`
+    `documentation-thumbs/${hash}-${optionsHash}${extension}`
   );
 
   try {

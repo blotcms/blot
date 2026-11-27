@@ -1,79 +1,9 @@
-{{> close-button}}
-
 {{> message}}
 
-<form class="dashboard-form" action="{{{base}}}/domain" method="POST">
-<div style="border:1px solid #eeeeec;border-radius: 5px;overflow: hidden;">
-<input type="hidden" name="_csrf" value="{{csrftoken}}" />
+<header class="page-header"><div class="page-header__text"><h1 class="page-header__title">Domain</h1></div></header>
 
-{{#edit.custom}}
-{{> custom-domain}}
-{{/edit.custom}}
-{{^edit.custom}}
-<a class="line" href="{{{base}}}/domain/custom" >
-  <span class="label">Domain</span>
-  <span class="center" style="display: flex;max-width: 100%;">
-    <span style="display: flex;width: 100%;">
-      {{#customDomain}}
-      {{^domainWarning}}
-      <span style="color:green;font-size: 12px;margin-right: 4px;position: relative;top:6px" class="icon-small-check"></span> 
-      {{/domainWarning}}
-      {{#domainWarning}}
-      <span style="color: orange; font-size: 12px; margin-right: 4px; position: relative; top: 6px" class="icon-small-alert"></span>
-      {{/domainWarning}}
-      <span style="color:var(--light-text-color);opacity: 0.75;">https://</span>
-      <span class="truncate">{{customDomain}}</span>
-      <span class="link" style="margin-left: 12px;">Edit</span>
-      {{/customDomain}}      
-      {{^customDomain}}
-      <span class="link">Use your own domain</span>
-      {{/customDomain}}
-    </span>
-  </span>
-</a>
-
-{{/edit.custom}}
-
-{{#edit.custom}}
-
-
-<!-- TODO add guide to purchasing domain if the domain is unregistered! -->
-<!-- TODO vary error based on first setup or subsequent -->
-{{#customDomain}}
-		{{#domainWarning}}
-      {{> record-guide}}
-		{{/domainWarning}}
-	{{/customDomain}}
-  {{/edit.custom}}
-
-
-{{^edit.subdomain}}
-<a class="line" href="{{{base}}}/domain/subdomain" style="border-bottom: none;">
-  <span class="label">Subdomain on Blot</span>
-  <span class="center" style="display: flex;max-width: 100%;">
-    <span style="display: flex;width: 100%;">
-      <span style="color:var(--light-text-color);opacity: 0.75;">https://</span>
-      <span class="truncate">{{blog.handle}}.{{host}}</span>
-      <span class="link" style="margin-left: 12px;">Edit</span>
-    </span>
-  </span>
-</a>
-{{/edit.subdomain}}
-{{#edit.subdomain}}
-{{> sub-domain}}
-{{/edit.subdomain}}
-
-
-
-
+<div class="dashboard-form-panel">
+  <div class="dashboard-form-panel__body">
+    {{> domain-panel}}
+  </div>
 </div>
-</form>
-
-<style>
-  th, td {
-    border-bottom: none;
-    padding: 0;
-  }
-
-  th {border-bottom: 1px solid #eeeeec;}
-</style>

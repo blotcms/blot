@@ -2,6 +2,7 @@ const { join } = require("path");
 const pathNormalizer = require("helper/pathNormalizer");
 const normalize = (path) => pathNormalizer(path).toLowerCase();
 const type = require("helper/type");
+const safeRedirect = require("./safe-redirect");
 
 function middleware(req, res, next) {
   // Expose a valid message to the view
@@ -41,6 +42,9 @@ function middleware(req, res, next) {
       text = message.message || "Error";
       error = true;
     }
+
+    // The address may come from a form's redirect field
+    url = safeRedirect(url, join(req.baseUrl || "", req.path), req.hostname);
 
     req.session.message = {
       text,

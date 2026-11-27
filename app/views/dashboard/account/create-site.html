@@ -1,3 +1,4 @@
+<header class="page-header"><div class="page-header__text"><h1 class="page-header__title">{{title}}</h1></div></header>
 
 <form method="POST" class="dashboard-form">
   <input type="hidden" name="_csrf" value="{{csrftoken}}">
@@ -34,14 +35,14 @@
   {{/first_site}}
 
     <div  style="margin-top: 24px;">
-<label for="title">Title</label>
+<label for="title_input">Title</label>
 <input id="title_input" type="text" name="title" value="Untitled site">
 
   <div class="buttons">
     <button type="submit" >
       Create site</button>
       {{#first_site}}
-    <button type="submit" name="no_title">Skip</a>
+    <button type="submit" name="no_title">Skip</button>
     {{/first_site}}
     {{^first_site}}
     <a href="/sites">Cancel</a>

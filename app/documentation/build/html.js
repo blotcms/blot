@@ -15,7 +15,7 @@ const windows = ($) => {
   finder.html_parser($);
 };
 
-module.exports = async (contents) => {
+module.exports = async (contents, { path = "" } = {}) => {
   const transformers = [
     require("../tools/hljs"),
     require("../tools/typeset"),
@@ -42,6 +42,10 @@ module.exports = async (contents) => {
 
   for (const transformer of transformers) {
     transformer($);
+  }
+
+  if (path.startsWith("how/")) {
+    $("table:not(table table)").wrap('<div class="documentation-table"></div>');
   }
 
   let result = $.html();

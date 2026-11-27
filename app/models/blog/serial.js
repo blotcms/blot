@@ -27,7 +27,9 @@ function serialize(sourceObj) {
 }
 
 function deserialize(sourceObj) {
-  var obj = _.cloneDeep(sourceObj);
+  // A Redis hash reply is a flat object of strings, so a shallow copy keeps
+  // the source (perhaps a cached reply) untouched as well as a deep one does
+  var obj = { ...sourceObj };
 
   for (var i in obj) {
     if (

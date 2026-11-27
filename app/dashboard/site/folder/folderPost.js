@@ -124,7 +124,10 @@ function formatEntry(entry, blog) {
     last: i === arr.length - 1,
   }));
 
-  entry.backlinks = (entry.backlinks || []).map((backlink) => ({ backlink }));
+  entry.backlinks = (entry.backlinks || []).map((backlink, i, arr) => ({
+    backlink,
+    last: i === arr.length - 1,
+  }));
 
   entry.internalLinks = (entry.internalLinks || []).map((internalLink) => ({
     internalLink,
@@ -132,7 +135,10 @@ function formatEntry(entry, blog) {
 
   entry.dependencies = (entry.dependencies || [])
     .filter((dependency) => !isSyntheticDependency(dependency))
-    .map((dependency) => ({ dependency }));
+    .map((dependency, i, arr) => ({
+      dependency,
+      last: i === arr.length - 1,
+    }));
 
   const rawMetadata = { ...(entry.metadata || {}) };
   delete rawMetadata._sourcePaths;

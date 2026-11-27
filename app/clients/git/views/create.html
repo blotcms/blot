@@ -1,4 +1,3 @@
-{{> message}}
 
 {{> status-line}}
 
@@ -20,7 +19,7 @@
             <input type="hidden" name="_csrf" value="{{csrftoken}}">
             <div class="buttons">
               <button type="submit">{{#failed}}Try again{{/failed}}{{^failed}}Create repository{{/failed}}</button>
-              {{^blog.client}}<a href="{{{dashboardBase}}}/client">Cancel</a>{{/blog.client}}
+              {{^blog.client}}<a href="{{{dashboardBase}}}/sync">Cancel</a>{{/blog.client}}
               {{#blog.client}}<button type="submit" name="cancel" value="cancel">Cancel</button>{{/blog.client}}
             </div>
           </form>

@@ -1,5 +1,5 @@
 const CodeMirror = require("codemirror");
-const initSidebarActionMenu = require("./sidebar-action-menu");
+const initRowMenu = require("../../../js/row-menu.js");
 
 require("codemirror/addon/selection/active-line.js");
 require("codemirror/addon/edit/matchbrackets.js");
@@ -32,6 +32,7 @@ function initializeSourceEditor() {
   var editor = CodeMirror.fromTextArea(sourceElement, {
     mode: mode,
     lineNumbers: true,
+    screenReaderLabel: "Source code",
     lineWrapping: true,
     smartIndent: false,
     styleActiveLine: true,
@@ -220,7 +221,7 @@ function initializeSourceSidebarMenu() {
     return baseUrl;
   };
 
-  initSidebarActionMenu({
+  initRowMenu({
     container: list,
     menuElement: menu,
     rowSelector: ".template-row",

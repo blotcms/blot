@@ -1,16 +1,19 @@
 :root {
   --font-picker-height: 340px;
-  --font-picker-trigger-padding: 0.5rem 1em;
+  --font-picker-trigger-padding: var(--space-2) 1em;
   --font-option-font-size: 1.2em;
   --font-option-line-height: 1.1;
-  --font-option-padding: 0.5rem 0.75rem;
-  --font-filter-border-radius: 10px;
-  --font-filter-font-size: 12px;
+  --font-option-padding: var(--space-2) var(--space-3);
+  --font-filter-border-radius: var(--radius-lg);
+  --font-filter-font-size: var(--text-xs);
   --font-input-width: 60px;
   --font-input-margin: 0.5em;
-  --font-option-selected-bg: #e0e0e0;
-  --font-option-hover-bg: #fff;
-  --font-picker-bg: #fafafa;
+  --font-option-selected-bg: var(--selected-background-color);
+  --font-option-hover-bg: var(--hover-background-color);
+  --font-option-active-bg: var(--active-background-color);
+  --font-picker-bg: var(--background-color);
+  --font-row-gap: var(--template-setting-spacing-horizontal);
+  --font-row-label-min-width: 2.75em;
 }
 
 /* Font picker control */
@@ -24,10 +27,10 @@
   align-items: center;
   box-sizing: border-box;
   width: 100%;
-  gap: 0.6em;
-  padding: 8px;
+  gap: var(--font-row-gap);
+  padding: var(--template-setting-row-padding);
   font-size: var(--select-control-font-size);
-  border-bottom: 1px solid var(--light-border-color);
+  border-bottom: 1px solid var(--template-editor-divider-color);
 }
 
 .font-row:last-child {
@@ -36,14 +39,15 @@
 
 .font-row-label {
   flex: 0 0 auto;
-  min-width: 2.75em;
-  font-size: var(--heading-font-size);
-  color: var(--text-color);
+  min-width: var(--font-row-label-min-width);
 }
 
 .font-picker-trigger {
+  display: flex;
+  align-items: center;
   flex: 1 1 auto;
   min-width: 0;
+  height: var(--template-setting-control-height);
   box-sizing: border-box;
   padding: 0.4em 1.6em 0.4em 0.6em;
   cursor: pointer;
@@ -51,16 +55,25 @@
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius);
   text-align: left;
-  display: block;
   overflow: hidden;
   font: inherit;
   color: inherit;
-  background-color: var(--background-color);
+  background-color: transparent;
+  transition: background-color 150ms ease, border-color 150ms ease;
 }
 
 .font-picker-trigger:hover {
-  background-color: var(--light-background-color);
+  background-color: var(--hover-background-color);
   outline: none;
+}
+
+.font-picker-trigger:active {
+  background-color: var(--active-background-color);
+}
+
+.font-picker-trigger:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 1px;
 }
 
 .font-picker-trigger::after {
@@ -110,12 +123,13 @@
   opacity: 0;
   transform: translateY(-8px);
   pointer-events: none;
-  transition: opacity 0.16s ease, transform 0.16s ease;
-  border: 1px solid #ddd;
-  border-radius: var(--border-radius);
+  transition: opacity 150ms ease, transform 150ms ease;
+  /* Same surface as every dropdown: dashboard/css/menu.css */
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--font-picker-bg);
-  box-shadow: 0 0.5em 1.5em rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-lg);
   user-select: none;
 }
 
@@ -127,7 +141,7 @@
   bottom: 0;
   left: 0;
   height: 16px;
-  background: linear-gradient(to bottom, rgb(255 255 255 / 0), #fff);
+  background: linear-gradient(to bottom, rgb(255 255 255 / 0), var(--background-color));
   pointer-events: none;
 }
 
@@ -146,7 +160,7 @@
   flex-wrap: nowrap;
   width: max-content;
   padding: 0.3em 0.5em;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--template-editor-divider-color);
   font-size: var(--font-filter-font-size);
 }
 
@@ -159,15 +173,27 @@
   cursor: pointer;
   color: var(--light-text-color);
   background: transparent;
+  transition: background-color 150ms ease, color 150ms ease;
 }
 
 .template-font-picker__filter:hover {
   color: var(--accent-color);
+  background: var(--hover-background-color);
+}
+
+.template-font-picker__filter:active {
+  color: var(--accent-active-color);
+  background: var(--active-background-color);
+}
+
+.template-font-picker__filter:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 1px;
 }
 
 .template-font-picker__filter.is-active {
   color: var(--accent-color);
-  background: #f2f2f2;
+  background: var(--selected-background-color);
 }
 
 .template-font-picker__options {
@@ -189,7 +215,7 @@
   margin: 0;
   padding: var(--font-option-padding);
   border: none;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--template-editor-divider-color);
   outline: none;
   box-sizing: border-box;
   text-align: left;
@@ -197,10 +223,20 @@
   line-height: var(--font-option-line-height);
   background: var(--font-picker-bg);
   cursor: pointer;
+  transition: background-color 150ms ease;
 }
 
 .template-font-picker__option:hover {
   background: var(--font-option-hover-bg);
+}
+
+.template-font-picker__option:active {
+  background: var(--font-option-active-bg);
+}
+
+.template-font-picker__option:focus-visible {
+  background: var(--font-option-hover-bg);
+  box-shadow: inset 0 0 0 2px var(--accent-color);
 }
 
 .template-font-picker__option.is-selected {
