@@ -57,6 +57,10 @@ function defaultMasks(os, view) {
       { name: "preview-atlas", kind: "preview", x: 34, y: 66, w: 128, h: 128 },
       { name: "preview-post", kind: "preview", x: 34, y: 242, w: 128, h: 128 },
     ];
+  // Safari on the macos-26 runner (26.7) loads the page (the capture's server logs every request) but
+  // never paints it, so the capture's page area is blank; the window's chrome is what this case judges.
+  if (os === "macos" && view === "browser")
+    return [{ name: "page", kind: "artifact", x: 0, y: 56, w: null, h: null }];
   if (os === "macos" && (view === "default" || view === "listsel")) {
     return [
       { name: "date-column", kind: "time", x: 264, y: 84, w: 74, h: null },

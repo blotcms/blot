@@ -547,6 +547,18 @@ capture "macos-$THEME$SUFFIX-hero"
 hero_select Blot Toucan.jpg
 capture "macos-$THEME$SUFFIX-iconssel"
 hero_opts 128
+# Finder stores the new icon size (it reads back as 128) but an open window keeps drawing the old one:
+# close the window and open the folder again, at the same bounds, so it lays out at the new size
+osascript >>"$OUT/hero.log" 2>&1 <<OSA
+tell application "Finder"
+  close front Finder window
+  set w to make new Finder window to (POSIX file "$HERO" as alias)
+  set current view of w to icon view
+  set bounds of w to {$L, $T, $R, $B}
+  log "reopened at icon size " & (icon size of icon view options of w)
+end tell
+OSA
+sleep 3
 hero_select
 capture "macos-$THEME$SUFFIX-large"
 hero_select Blot
