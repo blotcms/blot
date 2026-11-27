@@ -319,6 +319,15 @@ module.exports = {
     // entries and scratch, while the disk it is on has less free than this
     // (as folder_cache does)
     min_free_percent: 10,
+    // How long a socket to S3 may go with no bytes before the request fails
+    // (a TimeoutError, which the store retries where it retries a failed
+    // read and otherwise fails the operation with). A push holds the blog's
+    // ref lock and a sync holds its folder lock while they wait on S3, so a
+    // stalled connection must not hold them for the shared client's two
+    // minutes. It is idle time, not the length of a request: a clone's long
+    // ranged reads and a push's packs keep it from firing while bytes move.
+    // S3 answers a request in well under a second and streams steadily.
+    s3_socket_timeout_ms: 45 * 1000,
   },
 
   // The content cache of the S3 backend of storage/folder
