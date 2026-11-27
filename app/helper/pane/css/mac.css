@@ -1,6 +1,6 @@
 /* macOS Finder (Tahoe), list view. Every rule is rooted at .pane; the build wraps it. */
-@light{--sh:0 0 0 .5px rgba(0,0,0,.25),0 18px 40px rgba(0,0,0,.35);--bg:#fff;--fg:#272727;--dim:#808080;--title:#4c4c4c;--stripe:#f4f5f5;--l1:#f0f0f0;--l2:#ddd;--div:#e6e6e6;--pill:#f2f2f2;--pill-ring:#f9f9f9;--nav:#b2b2b2;--pill-sh:rgba(0,0,0,.13)}
-@dark{--sh:inset 0 0 0 1px #4b4b4b,0 0 0 .5px #070707,0 18px 40px rgba(0,0,0,.7);--bg:#1e1e1e;--fg:#ddd;--dim:#9a9a9a;--title:#e8e8e8;--stripe:#292929;--l1:#2d2d2d;--l2:#404040;--div:#343434;--pill:#141414;--pill-ring:#232323;--nav:#555;--pill-sh:rgba(0,0,0,.2);.pane .pane-k-text{background-image:url(icon:mac/text-d)}.pane .pane-k-md{background-image:url(icon:mac/md-d)}.pane .pane-k-html{background-image:url(icon:mac/html-d)}.pane .pane-k-doc{background-image:url(icon:mac/doc-d)}.pane .pane-k-generic{background-image:url(icon:mac/generic-d)}.pane .pane-k-link{background-image:url(icon:mac/link-d)}}
+@light{--sel:#0064e1;--sh:0 0 0 .5px rgba(0,0,0,.25),0 18px 40px rgba(0,0,0,.35);--bg:#fff;--fg:#272727;--dim:#808080;--title:#4c4c4c;--stripe:#f4f5f5;--l1:#f0f0f0;--l2:#ddd;--div:#e6e6e6;--pill:#f2f2f2;--pill-ring:#f9f9f9;--nav:#b2b2b2;--pill-sh:rgba(0,0,0,.13)}
+@dark{--sel:#0059d2;--sh:inset 0 0 0 1px #4b4b4b,0 0 0 .5px #070707,0 18px 40px rgba(0,0,0,.7);--bg:#1e1e1e;--fg:#ddd;--dim:#9a9a9a;--title:#e8e8e8;--stripe:#292929;--l1:#2d2d2d;--l2:#404040;--div:#343434;--pill:#141414;--pill-ring:#232323;--nav:#555;--pill-sh:rgba(0,0,0,.2);.pane .pane-k-text{background-image:url(icon:mac/text-d)}.pane .pane-k-md{background-image:url(icon:mac/md-d)}.pane .pane-k-html{background-image:url(icon:mac/html-d)}.pane .pane-k-doc{background-image:url(icon:mac/doc-d)}.pane .pane-k-generic{background-image:url(icon:mac/generic-d)}.pane .pane-k-link{background-image:url(icon:mac/link-d)}}
 .pane{--step:15px;--g-chev:url(icon:mac/chevron);--g-nav:url(icon:mac/nav);--g-sort:url(icon:mac/sort);
 background:var(--bg);color:var(--fg);font:13px/20px -apple-system,"SF Pro Text",system-ui,sans-serif;
 border-radius:26px;box-shadow:var(--sh)}
@@ -24,6 +24,9 @@ linear-gradient(var(--div),var(--div)) 467.5px 3.5px/1px 19px no-repeat}
 .pane .pane-tree{padding:5px 0 8px}
 .pane .pane-row{margin:0 10px;height:20px;border-radius:5px}
 .pane .pane-odd{background:var(--stripe)}
+.pane .pane-row.pane-sel{background:var(--sel);color:#fff}
+.pane .pane-row.pane-sel .pane-cell{color:rgba(255,255,255,.82)}
+.pane .pane-row.pane-sel.pane-open::before{background:#fff}
 .pane .pane-label{width:252.5px;padding-left:calc(37.5px + var(--x,0px))}
 .pane .pane-icon{left:calc(17px + var(--x,0px));width:14px;height:16px;margin-top:-8px}
 .pane .pane-open::before{content:"";position:absolute;left:calc(4px + var(--x,0px));top:6px;width:9px;height:8px;background:var(--dim);-webkit-mask:var(--g-chev) center/9px 8px no-repeat;mask:var(--g-chev) center/9px 8px no-repeat}
@@ -53,4 +56,7 @@ linear-gradient(var(--div),var(--div)) 467.5px 3.5px/1px 19px no-repeat}
 }
 @container (max-width:299px){
 .pane .pane-d,.pane .pane-head i:nth-child(2){display:none}
+}
+@media (forced-colors:active){
+.pane .pane-row.pane-sel{background:Highlight;color:HighlightText}
 }

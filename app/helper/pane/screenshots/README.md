@@ -89,3 +89,11 @@ smoke test, and prints a diff summary. Notes:
   iframe request; aborted requests (`ERR_ABORTED`) are not failures.
 - Windows and Linux images are only trustworthy from their own runner; never regenerate
   them on macOS.
+
+## The Blot study captures (macos.sh)
+After the Safari capture and before the desktop icons, `macos.sh` builds `~/Documents/Blot` (a `Blot` folder, three
+photos from `fixture-assets/hero/`, `Post.md`, `Atlas.html`), resets the Finder toolbar to back/forward + flexible space
++ the view-mode button (`com.apple.finder.SWCH`) and captures `-hero`, `-iconssel`, `-large` and `-largesel`. It starts with
+`clear_stage` like every capture. The existing list capture is unchanged except for one extra shot, `-listsel`
+(the `Fruits` row selected), taken in the same window right after it. The Finder AppleScript settings (icon size,
+by-name arrangement) are best-effort; `hero.log` in the capture logs shows what Finder accepted.

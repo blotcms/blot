@@ -477,6 +477,61 @@ Also extend `qa/pane-adapter.js` (drop the `c.os !== "macos"` line in the icons 
 OS its tree) and `qa/thresholds.json`, and `qa/backdrop.js`'s icons filter. Windows' Explorer hides
 extensions of known types (already in the label markup) and has no Type/Size text in this view.
 
+### The Blot study: selection, thumbnails, long names, large icons (macOS; folded in from two design studies)
+
+Two studies of the Blot folder in Finder (`template-patterns/patterns/brochure/logos` and `software-hero`) showed what
+the icons view lacked. All of it is macOS skin and `lib/markup.js`; other OSes fall back to the mac window as for the
+rest of the icons view. The studies' comparison UI (sliders, crossfade, diff tables) is not ported: `qa/` does that.
+
+**Source syntax: row attributes.** A pipe field in square brackets is an attribute of the row, not a column
+(`lib/parse.js`; `node.attrs`): `Blot | [selected]`, `Toucan.jpg | [img=/images/toucan.jpg]`. Attributes can sit among the
+columns (`Apple.md | 2 KB | [selected]`) and are not counted as one.
+
+- **`[selected]`** (icons, desktop and list). Icons view: `li.pane-sel`, a grey backing (1/8 larger than the icon, so 72px
+  at 64px icons, 144px at 128px; `--selbg` `#e6e6e6` light, `#313131` dark) drawn by `li::before` behind the icon, and a
+  blue pill (`--selpill`, `#0064e1` / `#0059d2`) that hugs the name (`width:fit-content`) with white text. List view:
+  `.pane-row.pane-sel`, the row filled blue (`--sel`), white text, secondary columns 82% white, white disclosure
+  chevron. Screen readers get `, selected` (a `.pane-sr`). It is the *active* selection (key window); Finder's grey
+  inactive selection is not drawn. The studies' four states (light/dark x default/selected) are the two themes of one
+  window, so there is no `theme` marker beyond the existing `theme` option.
+- **`[img=URL]`** (icons and desktop): the picture is the icon. The one extra node: an `<img alt="" loading="lazy">` inside
+  the icon `<i class="pane-icon pane-k-<kind> pane-th">`; the label still names the file. The skin keeps the picture in
+  proportion inside the icon box (max 7/8 of it) in a thin white frame with a shadow (`--thsh`). Only http(s),
+  protocol-relative, relative paths and image data URIs are accepted; anything else is dropped and the kind's icon shows.
+  The list view ignores `img` (its 16px icons stay).
+
+**Options.** `iconSize:"large"` (HTML: `data-icon-size="large"`) puts the icons view and desktop at 128px icons (class
+`pane-lg`: `--is:128px;--k:2;--cw:176px;--lw:168px`; the artwork is vector, scaled; px-drawn captions scale with `--k`).
+`toolbar:"view"` (`data-toolbar="view"`) adds Finder's view-mode button to the toolbar: a glass pill with the icon-grid
+glyph and a chevron, drawn on the existing `.pane-head` node (hidden in the icons view otherwise), class `pane-vb`.
+It is off by default because the icons capture (`macos-*-icons`) has back/forward only; the Blot study captures have it.
+
+**Names.** Finder wraps a name over two lines and shortens a longer one in the middle (`longer-n...cated.jpg`). CSS cannot
+truncate in the middle, so the build splits a name whose estimated width (a per-character-class estimate of 12px SF Pro,
+`estimate()` in `markup.js`) exceeds 190px, more than two 104px lines can hold, into `.pane-m` (the start) and `.pane-e`
+(the last extension + 5 characters). `.pane-m` is clipped to two lines; a float with `shape-outside` that begins at the
+second line (`.pane-m::before`, `--n` characters wide) reserves the room, and `.pane-e` is positioned there after an
+ellipsis (`::before`). The text stays whole (start + end, in order) for copy and screen readers, and it works on any
+background (no masking of the clamp's own ellipsis). Known difference: the first line breaks at hyphens and spaces as
+text does, so a long word that does not fit leaves a gap before the ellipsis on the second line, where Finder fills the
+line to the character. A name that fits two lines, or that the estimate puts just under the limit, keeps the plain
+two-line clamp with an end ellipsis. A scroller rule follows the size: large icons hold two to a row in the default
+window, so more than two items make the list a focusable scroller.
+
+**Reflow and sizing.** The grid is `repeat(auto-fill, cell)` left-aligned at Finder's fixed spacing, so icons reflow as the
+window narrows (`tests/blot-icons.js` checks 4, 3 and 6 columns at 567, 440 and 700px). The study stretched its columns
+(`minmax(16.5cqw,1fr)`) because it scaled everything with the stage; real Finder does not, and the captures win. Window
+size is the existing `width`/`height`; the study's window is 567x410.
+
+**Captures** (`screenshots/macos.sh`, section "Blot icons study"): a folder named `Blot` holding a `Blot` folder, the three
+study photos (downscaled copies in `fixture-assets/hero/`), `Post.md` and `Atlas.html`, in icon view, by name, with the
+toolbar reset to back/forward, flexible space and the view-mode button (`com.apple.finder.SWCH`) *after* the list and
+icons captures (their toolbar is unchanged). Per theme: `-hero` (64pt, nothing selected), `-iconssel` (Blot and
+Toucan.jpg selected), `-large` (128pt) and `-largesel` (Blot selected), plus `-listsel` in the existing list window
+(the Fruits row selected). Finder's order is by name (Atlas.html, Blot, fly-...jpg, Post.md, Toucan.jpg, weaver-...jpg), not
+the study's hand placement. `qa/pane-adapter.js` renders the same tree; the two page previews are masked
+(`qa/lib/cases.js`, kind `preview`).
+
 ### Desktop view (`view:"desktop"`), macOS built; the contract for the other skins
 
 Icons loose on the page, no window at all: an author asks for this over a `<background>` (or any

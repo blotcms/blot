@@ -25,6 +25,38 @@ const escape = (s) =>
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]
   );
 
+// A picture's address for a thumbnail: http(s), protocol-relative, root-relative or relative paths and
+// image data URIs. Anything else (javascript:, other schemes) is dropped and the kind's icon is shown.
+function safeUrl(u) {
+  if (typeof u !== "string") return null;
+  u = u.trim();
+  if (/^data:image\/(png|jpe?g|gif|webp|avif);base64,[a-z0-9+/=]+$/i.test(u))
+    return u;
+  if (/^(https?:)?\/\//i.test(u)) return u;
+  return /^[^:?#]*([?#]|$)/.test(u) && u ? u : null; // no scheme: root-relative or relative
+}
+
+// Finder shows a name over two lines and shortens a longer one in the middle ("longer-n...cated.jpg"),
+// keeping the end, which carries the extension. CSS cannot truncate in the middle, so a name that
+// surely overflows two lines of the 104px label is split into its start and its last few characters
+// (DESIGN.md, "Icons view"). The width is an estimate of 12px SF Pro text, per character class.
+const NARROW = /[iljtfI.,;:'|!()[\]\- ]/;
+const WIDE = /[mwMW@%]/;
+const estimate = (name) =>
+  [...name].reduce(
+    (w, c) =>
+      w +
+      (NARROW.test(c) ? 3.6 : WIDE.test(c) ? 10 : /[A-Z0-9]/.test(c) ? 8 : 6.4),
+    0
+  );
+const TWO_LINES = 190;
+function splitName(name) {
+  if (estimate(name) <= TWO_LINES) return null;
+  const ext = /\.[^.\s]{1,8}$/.exec(name);
+  const tail = Math.min(name.length - 1, (ext ? ext[0].length : 3) + 5);
+  return [name.slice(0, -tail), name.slice(-tail)];
+}
+
 // The text for each OS, one <span data-os> each (or just the pinned OS's).
 const perOs = (fn, pin, oses = OS_KEYS) =>
   (pin ? [pin] : oses)
@@ -63,6 +95,7 @@ function folder(tree, options = {}) {
   const title = options.title || "Folder";
   const files = options.files || {};
   const now = options.now || "2026-01-01T00:00:00";
+  const large = ["large", 128, "128"].includes(options.iconSize);
   const nodes = parse(tree);
   const total = (ns) => ns.reduce((n, x) => n + 1 + total(x.children), 0);
   const paths = (ns) => ns.flatMap((x) => [x.path, ...paths(x.children)]);
@@ -124,11 +157,14 @@ function folder(tree, options = {}) {
       .map((n) => {
         const odd = row++ % 2 ? " pane-odd" : "";
         const open = n.children.length ? " pane-open" : "";
-        const sr = n.folder
-          ? `<span class="pane-sr">, folder${n.children.length ? ", expanded" : ""}</span>`
-          : "";
+        const sel = n.attrs.selected ? " pane-sel" : "";
+        const sr =
+          (n.folder
+            ? `<span class="pane-sr">, folder${n.children.length ? ", expanded" : ""}</span>`
+            : "") +
+          (n.attrs.selected ? '<span class="pane-sr">, selected</span>' : "");
         return (
-          `<li><span class="pane-row${odd}${open}"><span class="pane-label"><i class="pane-icon pane-k-${kindOf(n)}"></i>${label(n)}${sr}</span>${cells(n)}</span>` +
+          `<li><span class="pane-row${odd}${open}${sel}"><span class="pane-label"><i class="pane-icon pane-k-${kindOf(n)}"></i>${label(n)}${sr}</span>${cells(n)}</span>` +
           (n.children.length ? list(n.children, "") : "") +
           "</li>"
         );
@@ -148,12 +184,25 @@ function folder(tree, options = {}) {
           kind === "generic" && !n.folder && /\.([^.]+)$/.test(n.name)
             ? ` data-ext="${escape(/\.([^.]+)$/.exec(n.name)[1].toUpperCase())}"`
             : "";
-        const sr = n.folder ? '<span class="pane-sr">, folder</span>' : "";
-        return `<li><i class="pane-icon pane-k-${kind}"${ext}></i><span class="pane-label">${label(n)}${sr}</span></li>`;
+        const sr =
+          (n.folder ? '<span class="pane-sr">, folder</span>' : "") +
+          (n.attrs.selected ? '<span class="pane-sr">, selected</span>' : "");
+        // [img=URL]: the picture itself is the icon (an <img> inside it, the one node a thumbnail adds)
+        const url = safeUrl(n.attrs.img);
+        const picture = url
+          ? `<img src="${escape(url)}" alt="" loading="lazy" decoding="async">`
+          : "";
+        const split = splitName(n.name);
+        const text = split
+          ? `<span class="pane-m" style="--n:${split[1].length}">${escape(split[0])}</span><span class="pane-e">${escape(split[1])}</span>`
+          : label(n);
+        return `<li${n.attrs.selected ? ' class="pane-sel"' : ""}><i class="pane-icon pane-k-${kind}${url ? " pane-th" : ""}"${ext}>${picture}</i><span class="pane-label">${text}${sr}</span></li>`;
       })
       .join("") +
     "</ul>";
-  const scrollsIcons = options.height || nodes.length > ICON_SCROLLS_AFTER;
+  // (large icons hold two to a row in the default window, so a second row can already scroll)
+  const scrollsIcons =
+    options.height || nodes.length > (large ? 2 : ICON_SCROLLS_AFTER);
 
   // A scroller must be keyboard reachable and named. With an explicit height we can't know
   // whether the rows fit, so it always is. The Windows list is always wider than its window
@@ -181,7 +230,7 @@ function folder(tree, options = {}) {
       ? `<div class="pane-bar" aria-hidden="true">${escape(title)}</div><div class="pane-head" aria-hidden="true"><i></i><i></i><i></i></div>`
       : "";
   return (
-    `<figure class="pane${widerDates ? " pane-yd" : ""}" data-view="${view}"${pin ? ` data-pin="${pin}"` : ""}${theme ? ` data-theme="${theme}"` : ""}${size ? ` style="${size}"` : ""} aria-label="${escape(title)}">` +
+    `<figure class="pane${widerDates ? " pane-yd" : ""}${large && view !== "list" ? " pane-lg" : ""}${options.toolbar === "view" && view === "icons" ? " pane-vb" : ""}" data-view="${view}"${pin ? ` data-pin="${pin}"` : ""}${theme ? ` data-theme="${theme}"` : ""}${size ? ` style="${size}"` : ""} aria-label="${escape(title)}">` +
     chrome +
     body +
     "</figure>"

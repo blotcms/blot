@@ -44,7 +44,20 @@ function pngSize(file) {
 // captures; Linux columns are measured from the right edge so the wider
 // -sidebar capture lines up too. Tune here or in masks.json.
 function defaultMasks(os, view) {
-  if (os === "macos" && view === "default") {
+  // The study views (screenshots/macos.sh "hero"): Atlas.html and Post.md are drawn by Finder as tiny
+  // renderings of their text, which pane does not reproduce (kind "preview", like the icons view's). Grid
+  // positions of the 64px icons (4 columns of 112px) and the 128px ones (3 of 176px) in the 567px window.
+  if (os === "macos" && ["hero", "iconssel"].includes(view))
+    return [
+      { name: "preview-atlas", kind: "preview", x: 34, y: 66, w: 64, h: 64 },
+      { name: "preview-post", kind: "preview", x: 370, y: 66, w: 64, h: 64 },
+    ];
+  if (os === "macos" && ["large", "largesel"].includes(view))
+    return [
+      { name: "preview-atlas", kind: "preview", x: 34, y: 66, w: 128, h: 128 },
+      { name: "preview-post", kind: "preview", x: 34, y: 242, w: 128, h: 128 },
+    ];
+  if (os === "macos" && (view === "default" || view === "listsel")) {
     return [
       { name: "date-column", kind: "time", x: 264, y: 84, w: 74, h: null },
     ];
@@ -95,7 +108,11 @@ function defaultMasks(os, view) {
 function defaultRegions(os, view) {
   if (os === "macos") {
     const top =
-      view === "default" ? 80 : view === "text" || view === "code" ? 32 : 52; // TextEdit has no toolbar
+      view === "default" || view === "listsel"
+        ? 80
+        : view === "text" || view === "code"
+          ? 32
+          : 52; // TextEdit has no toolbar
     return [
       { name: "titlebar", kind: "chrome", x: 0, y: 0, w: null, h: top },
       { name: "content", kind: "text", x: 0, y: top, w: null, h: null },

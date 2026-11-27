@@ -256,8 +256,10 @@ try {
         expect(b.labels[1].h).toBe(32);
         expect(b.labels[2].h).toBe(32); // a fixed two-line box: cells stay aligned
         const clipped = await page.evaluate(() =>
+          // a name that surely overflows is cut in the middle (.pane-m clips its own text, tests/blot-icons.js)
           [...document.querySelectorAll(".pane-label")].map(
-            (l) => l.scrollHeight > l.clientHeight
+            (l) =>
+              l.scrollHeight > l.clientHeight || !!l.querySelector(".pane-m")
           )
         );
         expect(clipped.slice(0, 2)).toEqual([true, true]);
