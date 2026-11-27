@@ -264,7 +264,7 @@ place() {  # size the window (System Events), read it back into L T R B
 tell application "System Events" to tell process "Safari"
   set frontmost to true
   set position of window 1 to {150, 150}
-  set size of window 1 to {600, 400}
+  set size of window 1 to {760, 460}
 end tell
 OSA
   sleep 2
@@ -273,8 +273,26 @@ OSA
   L=$PX; T=$PY; R=$((PX + SX)); B=$((PY + SY))
   echo "browser bounds: $L, $T, $R, $B" >> "$OUT/bounds.txt"
 }
+# The runner's Safari sometimes shows its window blank (the page loaded, the server log has the requests, but
+# nothing painted). A page with photos is far bigger as a PNG than white, so measure that, and reload
+# (Cmd-R) until it paints; the log records each try.
+painted() {  # 0 when the page area has the page in it
+  screencapture -x -R$((L + 60)),$((T + 70)),$((R - L - 120)),$((B - T - 90)) /tmp/pane-painted.png 2>>"$OUT/browser.log"
+  local n; n=$(stat -f %z /tmp/pane-painted.png); echo "page png bytes: $n" >>"$OUT/browser.log"
+  [ "$n" -gt 30000 ]
+}
+wait_painted() {
+  local i
+  for i in 1 2 3 4; do
+    sleep 8
+    painted && return 0
+    osascript -e 'tell application "System Events" to tell process "Safari" to set frontmost to true' -e 'tell application "System Events" to keystroke "r" using command down' >>"$OUT/browser.log" 2>&1
+  done
+  echo "page never painted" >>"$OUT/browser.log"; return 1
+}
 winpos() { osascript -e 'tell application "System Events" to tell process "Safari" to return (position of window 1)' 2>>"$OUT/browser.log"; }
 place
+wait_painted
 screencapture -x "$OUT/debug-safari.png"
 # Remove the sidebar and tab group buttons from the toolbar: View > Customize Toolbar, drag each off
 # the toolbar (into the palette), Done. The sheet moves and widens the window, so read where the
@@ -314,18 +332,19 @@ OSA
   cliclick m:20,700; sleep 4   # a drag ghost of the palette lingered in the page for a moment
 } >>"$OUT/browser.log" 2>&1
 # Order the right-hand items as the study has them: New Tab (+), Share, Tab Overview. Safari's default
-# is Share, +, Tabs, so with the sheet open again drag + to the left of Share (the items sit at fixed
-# offsets from the window's right edge: Share 102pt, + 66pt, Tabs 30pt). Unverified on a runner:
-# debug-safari-reordered.png and the "toolbar:" line in browser.log show what happened.
-{
+# is Share, +, Tabs. The first try dragged + left of Share and dropped it off the toolbar, so drag Share
+# one slot right instead (the items sit at fixed offsets from the window's right edge: Share 100pt, +
+# 65pt, Tabs 30pt), in small steps. If + is gone afterwards (a drop that misses removes the item) it is
+# dragged back in from the palette (New Tab, 61pt right of the sheet's centre, 116pt below the window top).
+# debug-safari-reordered*.png and the "toolbar:" lines in browser.log show what happened.
+customize() {
   osascript -e 'tell application "System Events" to tell process "Safari" to set frontmost to true'
   osascript -e 'tell application "System Events" to tell process "Safari" to click menu item "Customize Toolbar…" of menu "View" of menu bar 1'
   sleep 3
   read -r WX WY WW WH <<< "$(osascript -e 'tell application "System Events" to tell process "Safari" to return (position of window 1) & (size of window 1)' | tr -d ',')"
-  RY=$((WY + 26)); PX=$((WX + WW - 66)); SX1=$((WX + WW - 102))
-  cliclick -w 100 dd:$PX,$RY dm:$((PX - 20)),$RY dm:$((SX1 - 14)),$RY du:$((SX1 - 14)),$RY
-  sleep 2
-  screencapture -x "$OUT/debug-safari-reordered.png"
+  RY=$((WY + 26))
+}
+done_customize() {
   osascript <<OSA
 tell application "System Events" to tell process "Safari"
   try
@@ -339,9 +358,29 @@ end tell
 OSA
   sleep 3
   cliclick m:20,700; sleep 2
-  osascript -e 'tell application "System Events" to tell process "Safari" to return "toolbar: " & (description of every button of toolbar 1 of window 1 as string)'
+}
+toolbar_items() { osascript -e 'tell application "System Events" to tell process "Safari" to return (description of every button of toolbar 1 of window 1 as string)'; }
+{
+  customize
+  SHX=$((WX + WW - 100)); PLX=$((WX + WW - 65))
+  cliclick -w 150 dd:$SHX,$RY dm:$((SHX + 8)),$RY dm:$((SHX + 20)),$RY dm:$((SHX + 32)),$RY dm:$((PLX + 6)),$RY w:500 du:$((PLX + 6)),$RY
+  sleep 2
+  screencapture -x "$OUT/debug-safari-reordered.png"
+  done_customize
+  TB="$(toolbar_items)"; echo "toolbar after reorder: $TB"
+  case "$TB" in
+    *"New Tab"*|*"Add Tab"*|*"New"*|*"+"*) ;;
+    *)
+      customize
+      cliclick -w 150 dd:$((WX + WW / 2 + 61)),$((WY + 116)) dm:$((WX + WW / 2 + 61)),$((WY + 100)) dm:$((WX + WW - 130)),$((RY + 20)) dm:$((WX + WW - 112)),$RY w:500 du:$((WX + WW - 112)),$RY
+      sleep 2
+      screencapture -x "$OUT/debug-safari-reordered-2.png"
+      done_customize
+      echo "toolbar after palette drag: $(toolbar_items)" ;;
+  esac
 } >>"$OUT/browser.log" 2>&1
 place   # the sheet widened the window; put it back
+wait_painted
 # Finder must not show below the browser; read what is open, then capture
 clear_stage "browser, before the capture" Safari
 osascript -e 'tell application "System Events" to return (name of every process whose visible is true)' >>"$OUT/browser.log" 2>&1
