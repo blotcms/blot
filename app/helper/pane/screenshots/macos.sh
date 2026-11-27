@@ -441,28 +441,64 @@ cp "$HERE/fixture-assets/checker.html" "$HERO/Atlas.html"
   echo "hero toolbar:"; defaults read com.apple.finder "NSToolbar Configuration Browser"
 } >> "$OUT/toolbar.log" 2>&1
 clear_stage "hero, toolbar set"
-hero_opts() {  # icon size; every setting is best-effort
+hero_opts() {  # icon size; every setting is best-effort, and each failure is logged (the first run swallowed them and 128 never applied)
   osascript >>"$OUT/hero.log" 2>&1 <<OSA
 tell application "Finder"
-  tell icon view options of front Finder window
-    try
-      set icon size to $1
-    end try
-    try
-      set text size to 12
-    end try
-    try
-      set arrangement to arranged by name
-    end try
-    try
-      set label position to bottom
-    end try
-    try
-      set shows item info to false
-    end try
-  end tell
+  set o to icon view options of front Finder window
+  try
+    set icon size of o to $1
+  on error e
+    log "icon size: " & e
+  end try
+  try
+    set text size of o to 12
+  on error e
+    log "text size: " & e
+  end try
+  try
+    set arrangement of o to arranged by name
+  on error e
+    log "arrangement: " & e
+  end try
+  try
+    set label position of o to bottom
+  on error e
+    log "label position: " & e
+  end try
+  try
+    set shows item info of o to false
+  on error e
+    log "shows item info: " & e
+  end try
+  log "icon size now " & (icon size of o)
 end tell
 OSA
+  local now; now="$(osascript -e 'tell application "Finder" to return icon size of icon view options of front Finder window' 2>>"$OUT/hero.log")"
+  if [ "$now" != "$1" ]; then
+    # Finder refused: use View > Show View Options (Cmd-J), whose Icon size slider runs 16..128. The panel's
+    # contents are logged for the next try.
+    echo "icon size is $now, not $1: trying the View Options panel" >>"$OUT/hero.log"
+    osascript >>"$OUT/hero.log" 2>&1 <<OSA
+tell application "System Events" to tell process "Finder"
+  set frontmost to true
+  keystroke "j" using command down
+  delay 2
+  log "windows: " & (name of every window as string)
+  try
+    log (entire contents of window 1 as string)
+  end try
+  try
+    set value of slider 1 of window 1 to $1
+  on error e
+    log "slider: " & e
+  end try
+  delay 1
+  keystroke "j" using command down
+end tell
+OSA
+    screencapture -x "$OUT/debug-viewoptions-$1.png"
+    echo "icon size after the panel: $(osascript -e 'tell application "Finder" to return icon size of icon view options of front Finder window' 2>>"$OUT/hero.log")" >>"$OUT/hero.log"
+  fi
   sleep 3
 }
 hero_select() {  # names to select (none: clear the selection); Finder stays frontmost so the selection is blue

@@ -53,7 +53,7 @@ const TWO_LINES = 190;
 function splitName(name) {
   if (estimate(name) <= TWO_LINES) return null;
   const ext = /\.[^.\s]{1,8}$/.exec(name);
-  const tail = Math.min(name.length - 1, (ext ? ext[0].length : 3) + 5);
+  const tail = Math.min(name.length - 1, (ext ? ext[0].length : 3) + 4);
   return [name.slice(0, -tail), name.slice(-tail)];
 }
 
