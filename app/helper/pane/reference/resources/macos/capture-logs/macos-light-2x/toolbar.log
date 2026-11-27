@@ -6,7 +6,7 @@ before:
     "TB Size Mode" = 1;
 }
 standard list view settings before:
-2026-11-27 14:10:42.521 defaults[1440:7882] 
+2026-11-27 15:35:39.621 defaults[1355:7553] 
 The domain/default pair of (com.apple.finder, FK_StandardViewSettings) does not exist
 after:
 {
@@ -67,4 +67,28 @@ standard list view settings after:
             };
         };
     };
+}
+hero toolbar:
+{
+    "TB Default Item Identifiers" =     (
+        "com.apple.finder.BACK",
+        "com.apple.finder.SWCH",
+        NSToolbarSpaceItem,
+        "com.apple.finder.ARNG",
+        NSToolbarSpaceItem,
+        "com.apple.finder.SHAR",
+        "com.apple.finder.LABL",
+        "com.apple.finder.ACTN",
+        NSToolbarSpaceItem,
+        "com.apple.finder.SRCH"
+    );
+    "TB Display Mode" = 2;
+    "TB Icon Size Mode" = 1;
+    "TB Is Shown" = 1;
+    "TB Item Identifiers" =     (
+        "com.apple.finder.BACK",
+        NSToolbarFlexibleSpaceItem,
+        "com.apple.finder.SWCH"
+    );
+    "TB Size Mode" = 1;
 }
