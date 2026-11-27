@@ -107,3 +107,24 @@
     filter: invert(1);
   }
 }
+
+@media (prefers-color-scheme: dark) {
+  /* The documentation layout sets its own near-black text and a translucent
+     black for the sidebar's links */
+  .documentation-layout {
+    --text-color: var(--blot-ink);
+  }
+
+  .documentation-sidebar .doc-nav a,
+  .documentation-sidebar .toc-list a {
+    color: rgb(242 242 240 / 45%);
+  }
+
+  .documentation-sidebar .doc-nav .selected > a,
+  .documentation-sidebar .doc-nav a.selected,
+  .documentation-sidebar .toc-list a.is-active-link,
+  .documentation-sidebar .doc-nav a:hover,
+  .documentation-sidebar .toc-list a:hover {
+    color: var(--text-color);
+  }
+}
