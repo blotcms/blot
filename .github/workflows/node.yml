@@ -472,7 +472,7 @@ jobs:
 
           # Same nyc as package.json
           NYC_VERSION=$(jq -r '.devDependencies.nyc // .dependencies.nyc' "$GITHUB_WORKSPACE/package.json" 2>/dev/null || true)
-          NYC_ARGS="--include=app/**/*.js --exclude=**/tests/** --exclude=**/tests.js --exclude=app/views-built/** --exclude=app/templates/source/**"
+          NYC_ARGS="--include=app/**/*.js --exclude=**/tests/** --exclude=**/tests.js --exclude=app/views-built/** --exclude=app/templates/source/** --exclude=app/helper/pane/qa/**"
           set -o pipefail
           npx --yes "nyc@${NYC_VERSION:-17.1.0}" report -t .nyc_output $NYC_ARGS \
             --reporter=text --reporter=text-summary --reporter=lcov --reporter=json-summary -o coverage \

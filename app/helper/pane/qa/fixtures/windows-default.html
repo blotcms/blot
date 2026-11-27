@@ -1,0 +1,27 @@
+<!-- Crude Windows 11 File Explorer fixture (details view). Dates are frozen constants. -->
+<style>
+.win{--bg:#fff;--fg:#1b1b1b;--dim:#5d5d5d;--bar:#eee;--tool:#f9f9f9;--line:#e0e0e0;
+  width:504px;height:367px;box-sizing:border-box;overflow:hidden;background:var(--bg);color:var(--fg);position:relative;
+  font:14px/20px "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;box-shadow:0 0 0 1px rgba(0,0,0,.12),0 2px 14px rgba(0,0,0,.18)}
+@media (prefers-color-scheme:dark){.win{--bg:#191919;--fg:#fff;--dim:#c5c5c5;--bar:#202020;--tool:#2c2c2c;--line:#3a3a3a}}
+.win .tabs{height:40px;background:var(--bar);padding:9px 0 0 8px;box-sizing:border-box}
+.win .tab{width:240px;height:31px;background:var(--tool);border-radius:8px 8px 0 0;padding:4px 14px}
+.win .addr{height:48px;background:var(--tool);border-bottom:1px solid var(--line);padding:11px 20px;box-sizing:border-box}
+.win .cmd{height:48px;background:var(--bg);border-bottom:1px solid var(--line);padding:12px 20px;box-sizing:border-box}
+.win .head{height:32px;display:flex;align-items:center;color:var(--dim);padding-left:30px}
+.win .row{height:28px;display:flex;align-items:center;padding-left:30px}
+.win .n{width:250px}.win .d{width:143px;color:var(--dim)}.win .t{color:var(--dim)}
+.win .status{position:absolute;left:0;right:0;bottom:0;height:26px;padding:3px 14px;box-sizing:border-box;font-size:13px;background:var(--bg)}
+</style>
+<div class="win">
+  <div class="tabs"><div class="tab">Your site</div></div>
+  <div class="addr">Your site</div>
+  <div class="cmd">New</div>
+  <div class="head"><span class="n">Name</span><span class="d">Date modified</span><span class="t">Type</span></div>
+  <div class="row"><span class="n">Fruits</span><span class="d">9/20/2026 3:37 PM</span><span class="t">File folder</span></div>
+  <div class="row"><span class="n">About</span><span class="d">9/17/2026 3:24 PM</span><span class="t">Text Document</span></div>
+  <div class="row"><span class="n">Animation</span><span class="d">8/31/2026 3:11 PM</span><span class="t">GIF File</span></div>
+  <div class="row"><span class="n">Blot.webloc</span><span class="d">8/6/2026 2:58 PM</span><span class="t">WEBLOC File</span></div>
+  <div class="row"><span class="n">Draft.md</span><span class="d">6/12/2026 2:45 PM</span><span class="t">MD File</span></div>
+  <div class="status">13 items</div>
+</div>

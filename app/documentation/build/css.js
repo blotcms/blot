@@ -7,6 +7,7 @@ const prettySize = require("helper/prettySize");
 const clfdate = require("helper/clfdate");
 
 const buildFinderCSS = require("../tools/finder/build.js");
+const pane = require("helper/pane");
 const { DOCUMENTATION_BUNDLE_EXCLUDES } = require("./pageSpecificAssets");
 
 const isExcludedFromDocumentationBundle = (filePath) =>
@@ -33,7 +34,9 @@ module.exports =
 
     const documentationCSS = await mergeCSSFiles(documentationFiles);
     const finderCSS = await buildFinderCSS();
-    const fullDocumentationCSS = documentationCSS.styles + "\n" + finderCSS;
+    // the pane windows' stylesheet (all three OS skins; the head script picks one by <html data-os>)
+    const fullDocumentationCSS =
+      documentationCSS.styles + "\n" + finderCSS + "\n" + pane.assets().css;
     await fs.writeFile(
       join(destination, "documentation.min.css"),
       fullDocumentationCSS
