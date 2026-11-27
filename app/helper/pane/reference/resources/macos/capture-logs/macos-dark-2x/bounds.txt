@@ -1,5 +1,7 @@
 bounds: 150, 150, 640, 510
 text bounds: 150, 150, 640, 510
 code bounds: 150, 150, 640, 510
-browser bounds: 150, 150, 750, 550
-browser bounds: 150, 150, 750, 550
+browser bounds: 150, 150, 910, 610
+browser bounds: 150, 150, 910, 610
+hero sidebar width: 0
+hero bounds: 150, 150, 717, 560

@@ -38,6 +38,8 @@ win.orderFront(null);
 $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(600));
 JXA
 sleep 3
+# a sleeping display makes Safari stop painting its pages, so keep it awake
+caffeinate -dimsu >/dev/null 2>&1 &
 defaults write -g AppleShowScrollBars -string WhenScrolling
 # Trim the Finder toolbar to just back/forward (the window title stays): drop
 # the view switcher, search, arrange, share, tag and action buttons. Identifiers are Finder's own.
@@ -264,7 +266,7 @@ place() {  # size the window (System Events), read it back into L T R B
 tell application "System Events" to tell process "Safari"
   set frontmost to true
   set position of window 1 to {150, 150}
-  set size of window 1 to {600, 400}
+  set size of window 1 to {760, 460}
 end tell
 OSA
   sleep 2
@@ -273,8 +275,45 @@ OSA
   L=$PX; T=$PY; R=$((PX + SX)); B=$((PY + SY))
   echo "browser bounds: $L, $T, $R, $B" >> "$OUT/bounds.txt"
 }
+# The runner's Safari sometimes shows its window blank (the page loaded, the server log has the requests, but
+# nothing painted). A page with photos is far bigger as a PNG than white, so measure that, and reload
+# (Cmd-R) until it paints; the log records each try.
+painted() {  # 0 when the page area has the page in it (below the toolbar's shadow, which is not blank either)
+  screencapture -x -R$((L + 60)),$((T + 190)),$((R - L - 120)),$((B - T - 210)) /tmp/pane-painted.png 2>>"$OUT/browser.log"
+  local n; n=$(stat -f %z /tmp/pane-painted.png); echo "page png bytes: $n" >>"$OUT/browser.log"
+  [ "$n" -gt 12000 ]
+}
+safari_keys() { osascript -e 'tell application "System Events" to tell process "Safari" to set frontmost to true' -e "tell application \"System Events\" to $1" >>"$OUT/browser.log" 2>&1; }
+# Remedies, one per try: wait, reload (Cmd-R), nudge the window's size (a relayout), a new window on the
+# page (Cmd-N, then the old one closed), and a fresh Safari. Each failed try leaves a debug screenshot.
+wait_painted() {
+  local i
+  for i in 1 2 3 4 5; do
+    sleep 8
+    painted && { echo "painted at try $i" >>"$OUT/browser.log"; return 0; }
+    screencapture -x "$OUT/debug-safari-unpainted-$i.png"
+    case $i in
+      1) safari_keys 'keystroke "r" using command down' ;;
+      2) osascript -e 'tell application "System Events" to tell process "Safari" to set size of window 1 to {780, 470}' >>"$OUT/browser.log" 2>&1; sleep 2; place ;;
+      3) safari_keys 'keystroke "n" using command down'; sleep 3
+         safari_keys 'keystroke "l" using command down'; safari_keys "keystroke \"https://$BROWSER_HOST/\""; safari_keys 'key code 36'; sleep 6
+         osascript -e 'tell application "System Events" to tell process "Safari" to click button 1 of window 2' >>"$OUT/browser.log" 2>&1; place ;;
+      4) pkill -x Safari; sleep 3; open -a Safari "https://$BROWSER_HOST/"; sleep 12; place ;;
+    esac
+  done
+  echo "page never painted" >>"$OUT/browser.log"
+  # diagnostics for the next try: does Safari paint any other page here? (screenshots in the run's artifacts)
+  local u n=0
+  for u in "https://example.com/" "file:///tmp/pane-browser/index.html" "https://$BROWSER_HOST/"; do
+    n=$((n + 1))
+    safari_keys 'keystroke "l" using command down'; safari_keys "keystroke \"$u\""; safari_keys 'key code 36'; sleep 10
+    screencapture -x "$OUT/debug-safari-diag-$n.png"; painted; echo "diag $u painted: $?" >>"$OUT/browser.log"
+  done
+  return 1
+}
 winpos() { osascript -e 'tell application "System Events" to tell process "Safari" to return (position of window 1)' 2>>"$OUT/browser.log"; }
 place
+wait_painted
 screencapture -x "$OUT/debug-safari.png"
 # Remove the sidebar and tab group buttons from the toolbar: View > Customize Toolbar, drag each off
 # the toolbar (into the palette), Done. The sheet moves and widens the window, so read where the
@@ -314,18 +353,19 @@ OSA
   cliclick m:20,700; sleep 4   # a drag ghost of the palette lingered in the page for a moment
 } >>"$OUT/browser.log" 2>&1
 # Order the right-hand items as the study has them: New Tab (+), Share, Tab Overview. Safari's default
-# is Share, +, Tabs, so with the sheet open again drag + to the left of Share (the items sit at fixed
-# offsets from the window's right edge: Share 102pt, + 66pt, Tabs 30pt). Unverified on a runner:
-# debug-safari-reordered.png and the "toolbar:" line in browser.log show what happened.
-{
+# is Share, +, Tabs. The first try dragged + left of Share and dropped it off the toolbar, so drag Share
+# one slot right instead (the items sit at fixed offsets from the window's right edge: Share 100pt, +
+# 65pt, Tabs 30pt), in small steps. If + is gone afterwards (a drop that misses removes the item) it is
+# dragged back in from the palette (New Tab, 61pt right of the sheet's centre, 116pt below the window top).
+# debug-safari-reordered*.png and the "toolbar:" lines in browser.log show what happened.
+customize() {
   osascript -e 'tell application "System Events" to tell process "Safari" to set frontmost to true'
   osascript -e 'tell application "System Events" to tell process "Safari" to click menu item "Customize Toolbar…" of menu "View" of menu bar 1'
   sleep 3
   read -r WX WY WW WH <<< "$(osascript -e 'tell application "System Events" to tell process "Safari" to return (position of window 1) & (size of window 1)' | tr -d ',')"
-  RY=$((WY + 26)); PX=$((WX + WW - 66)); SX1=$((WX + WW - 102))
-  cliclick -w 100 dd:$PX,$RY dm:$((PX - 20)),$RY dm:$((SX1 - 14)),$RY du:$((SX1 - 14)),$RY
-  sleep 2
-  screencapture -x "$OUT/debug-safari-reordered.png"
+  RY=$((WY + 26))
+}
+done_customize() {
   osascript <<OSA
 tell application "System Events" to tell process "Safari"
   try
@@ -339,9 +379,29 @@ end tell
 OSA
   sleep 3
   cliclick m:20,700; sleep 2
-  osascript -e 'tell application "System Events" to tell process "Safari" to return "toolbar: " & (description of every button of toolbar 1 of window 1 as string)'
+}
+toolbar_items() { osascript -e 'tell application "System Events" to tell process "Safari" to return (description of every button of toolbar 1 of window 1 as string)'; }
+{
+  customize
+  SHX=$((WX + WW - 100)); PLX=$((WX + WW - 65))
+  cliclick -w 150 dd:$SHX,$RY dm:$((SHX + 8)),$RY dm:$((SHX + 20)),$RY dm:$((SHX + 32)),$RY dm:$((PLX + 6)),$RY w:500 du:$((PLX + 6)),$RY
+  sleep 2
+  screencapture -x "$OUT/debug-safari-reordered.png"
+  done_customize
+  TB="$(toolbar_items)"; echo "toolbar after reorder: $TB"
+  case "$TB" in
+    *"New Tab"*|*"Add Tab"*|*"New"*|*"+"*) ;;
+    *)
+      customize
+      cliclick -w 150 dd:$((WX + WW / 2 + 61)),$((WY + 116)) dm:$((WX + WW / 2 + 61)),$((WY + 100)) dm:$((WX + WW - 130)),$((RY + 20)) dm:$((WX + WW - 112)),$RY w:500 du:$((WX + WW - 112)),$RY
+      sleep 2
+      screencapture -x "$OUT/debug-safari-reordered-2.png"
+      done_customize
+      echo "toolbar after palette drag: $(toolbar_items)" ;;
+  esac
 } >>"$OUT/browser.log" 2>&1
 place   # the sheet widened the window; put it back
+wait_painted
 # Finder must not show below the browser; read what is open, then capture
 clear_stage "browser, before the capture" Safari
 osascript -e 'tell application "System Events" to return (name of every process whose visible is true)' >>"$OUT/browser.log" 2>&1
@@ -389,28 +449,64 @@ cp "$HERE/fixture-assets/checker.html" "$HERO/Atlas.html"
   echo "hero toolbar:"; defaults read com.apple.finder "NSToolbar Configuration Browser"
 } >> "$OUT/toolbar.log" 2>&1
 clear_stage "hero, toolbar set"
-hero_opts() {  # icon size; every setting is best-effort
+hero_opts() {  # icon size; every setting is best-effort, and each failure is logged (the first run swallowed them and 128 never applied)
   osascript >>"$OUT/hero.log" 2>&1 <<OSA
 tell application "Finder"
-  tell icon view options of front Finder window
-    try
-      set icon size to $1
-    end try
-    try
-      set text size to 12
-    end try
-    try
-      set arrangement to arranged by name
-    end try
-    try
-      set label position to bottom
-    end try
-    try
-      set shows item info to false
-    end try
-  end tell
+  set o to icon view options of front Finder window
+  try
+    set icon size of o to $1
+  on error e
+    log "icon size: " & e
+  end try
+  try
+    set text size of o to 12
+  on error e
+    log "text size: " & e
+  end try
+  try
+    set arrangement of o to arranged by name
+  on error e
+    log "arrangement: " & e
+  end try
+  try
+    set label position of o to bottom
+  on error e
+    log "label position: " & e
+  end try
+  try
+    set shows item info of o to false
+  on error e
+    log "shows item info: " & e
+  end try
+  log "icon size now " & (icon size of o)
 end tell
 OSA
+  local now; now="$(osascript -e 'tell application "Finder" to return icon size of icon view options of front Finder window' 2>>"$OUT/hero.log")"
+  if [ "$now" != "$1" ]; then
+    # Finder refused: use View > Show View Options (Cmd-J), whose Icon size slider runs 16..128. The panel's
+    # contents are logged for the next try.
+    echo "icon size is $now, not $1: trying the View Options panel" >>"$OUT/hero.log"
+    osascript >>"$OUT/hero.log" 2>&1 <<OSA
+tell application "System Events" to tell process "Finder"
+  set frontmost to true
+  keystroke "j" using command down
+  delay 2
+  log "windows: " & (name of every window as string)
+  try
+    log (entire contents of window 1 as string)
+  end try
+  try
+    set value of slider 1 of window 1 to $1
+  on error e
+    log "slider: " & e
+  end try
+  delay 1
+  keystroke "j" using command down
+end tell
+OSA
+    screencapture -x "$OUT/debug-viewoptions-$1.png"
+    echo "icon size after the panel: $(osascript -e 'tell application "Finder" to return icon size of icon view options of front Finder window' 2>>"$OUT/hero.log")" >>"$OUT/hero.log"
+  fi
   sleep 3
 }
 hero_select() {  # names to select (none: clear the selection); Finder stays frontmost so the selection is blue
@@ -451,6 +547,18 @@ capture "macos-$THEME$SUFFIX-hero"
 hero_select Blot Toucan.jpg
 capture "macos-$THEME$SUFFIX-iconssel"
 hero_opts 128
+# Finder stores the new icon size (it reads back as 128) but an open window keeps drawing the old one:
+# close the window and open the folder again, at the same bounds, so it lays out at the new size
+osascript >>"$OUT/hero.log" 2>&1 <<OSA
+tell application "Finder"
+  close front Finder window
+  set w to make new Finder window to (POSIX file "$HERO" as alias)
+  set current view of w to icon view
+  set bounds of w to {$L, $T, $R, $B}
+  log "reopened at icon size " & (icon size of icon view options of w)
+end tell
+OSA
+sleep 3
 hero_select
 capture "macos-$THEME$SUFFIX-large"
 hero_select Blot

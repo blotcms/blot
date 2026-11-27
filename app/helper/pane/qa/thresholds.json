@@ -397,6 +397,282 @@
       "shadowError": 1,
       "sizeDelta": 1,
       "rowYOffset": 2.2
+    },
+    "macos-light-hero": {
+      "diffPercent": {
+        "overall": 1.34,
+        "chrome": 0.83,
+        "text": 1.41
+      },
+      "inkPercent": {
+        "chrome": 9.0,
+        "text": 19.0
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.51,
+        "chrome": 0.9,
+        "text": 0.45
+      },
+      "shadowError": 2.6,
+      "sizeDelta": 1,
+      "rowYOffset": 1.0
+    },
+    "macos-light-iconssel": {
+      "diffPercent": {
+        "overall": 1.53,
+        "chrome": 0.83,
+        "text": 1.63
+      },
+      "inkPercent": {
+        "chrome": 9.0,
+        "text": 16.0
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.63,
+        "chrome": 0.9,
+        "text": 0.59
+      },
+      "shadowError": 2.6,
+      "sizeDelta": 1,
+      "rowYOffset": 48.0
+    },
+    "macos-light-large": {
+      "diffPercent": {
+        "overall": 7.26,
+        "chrome": 0.83,
+        "text": 8.37
+      },
+      "inkPercent": {
+        "chrome": 9.0,
+        "text": 29.0
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 2.43,
+        "chrome": 0.9,
+        "text": 2.7
+      },
+      "shadowError": 2.6,
+      "sizeDelta": 1,
+      "rowYOffset": 3.2
+    },
+    "macos-light-largesel": {
+      "diffPercent": {
+        "overall": 7.28,
+        "chrome": 0.83,
+        "text": 8.39
+      },
+      "inkPercent": {
+        "chrome": 9.0,
+        "text": 25.0
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 2.41,
+        "chrome": 0.9,
+        "text": 2.66
+      },
+      "shadowError": 2.6,
+      "sizeDelta": 1,
+      "rowYOffset": 49.5
+    },
+    "macos-light-listsel": {
+      "diffPercent": {
+        "overall": 1.18,
+        "chrome": 0.3,
+        "text": 1.48
+      },
+      "inkPercent": {
+        "chrome": 6.0,
+        "text": 11.0
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.5,
+        "chrome": 0.41,
+        "text": 0.53
+      },
+      "shadowError": 2.6,
+      "sizeDelta": 1,
+      "rowYOffset": 1.0
+    },
+    "macos-light-browser": {
+      "diffPercent": {
+        "overall": 2.2,
+        "chrome": 2.2,
+        "text": 0.3
+      },
+      "inkPercent": {
+        "chrome": 29.0,
+        "text": 2.0
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 2.55,
+        "chrome": 2.55,
+        "text": 0.3
+      },
+      "shadowError": 2.6,
+      "sizeDelta": 1,
+      "rowYOffset": 1.0
+    },
+    "macos-dark-hero": {
+      "diffPercent": {
+        "overall": 1.41,
+        "chrome": 1.8,
+        "text": 1.36
+      },
+      "inkPercent": {
+        "chrome": 18.0,
+        "text": 19.0
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.49,
+        "chrome": 1.08,
+        "text": 0.4
+      },
+      "shadowError": 1.0,
+      "sizeDelta": 1,
+      "rowYOffset": 1.0
+    },
+    "macos-dark-iconssel": {
+      "diffPercent": {
+        "overall": 1.64,
+        "chrome": 1.8,
+        "text": 1.61
+      },
+      "inkPercent": {
+        "chrome": 18.0,
+        "text": 20.0
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.58,
+        "chrome": 1.08,
+        "text": 0.51
+      },
+      "shadowError": 1.0,
+      "sizeDelta": 1,
+      "rowYOffset": 1.0
+    },
+    "macos-dark-large": {
+      "diffPercent": {
+        "overall": 6.24,
+        "chrome": 1.78,
+        "text": 7.0
+      },
+      "inkPercent": {
+        "chrome": 18.0,
+        "text": 25.0
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 2.15,
+        "chrome": 1.08,
+        "text": 2.33
+      },
+      "shadowError": 1.0,
+      "sizeDelta": 1,
+      "rowYOffset": 50.9
+    },
+    "macos-dark-largesel": {
+      "diffPercent": {
+        "overall": 6.26,
+        "chrome": 1.79,
+        "text": 7.03
+      },
+      "inkPercent": {
+        "chrome": 18.0,
+        "text": 25.0
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 2.17,
+        "chrome": 1.08,
+        "text": 2.35
+      },
+      "shadowError": 1.0,
+      "sizeDelta": 1,
+      "rowYOffset": 50.9
+    },
+    "macos-dark-listsel": {
+      "diffPercent": {
+        "overall": 1.57,
+        "chrome": 0.91,
+        "text": 1.8
+      },
+      "inkPercent": {
+        "chrome": 14.0,
+        "text": 11.0
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.65,
+        "chrome": 0.46,
+        "text": 0.72
+      },
+      "shadowError": 1.0,
+      "sizeDelta": 1,
+      "rowYOffset": 1.0
+    },
+    "macos-dark-browser": {
+      "diffPercent": {
+        "overall": 3.14,
+        "chrome": 3.14,
+        "text": 0.3
+      },
+      "inkPercent": {
+        "chrome": 35.0,
+        "text": 2.0
+      },
+      "flatDeltaE": {
+        "chrome": 5.6,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 2.83,
+        "chrome": 2.83,
+        "text": 0.3
+      },
+      "shadowError": 1.0,
+      "sizeDelta": 1,
+      "rowYOffset": 1.0
     }
   }
 }

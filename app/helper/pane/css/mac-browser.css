@@ -5,7 +5,7 @@
    itself (DESIGN.md, Browser windows). */
 @light{--br-bar:var(--br-tint,#fff);--br-ink:#4a4a4a;--br-glyph:#262626;--br-soft:#767676}
 @dark{--br-bar:#1e1e1e;--br-ink:#fff;--br-glyph:#f0f0f0;--br-soft:#a6a6a6;.pane.pane-br .pane-page{z-index:2}}
-.pane.pane-br{--pane-w:600px;--pane-h:400px;background:var(--br-bar)}
+.pane.pane-br{--pane-w:760px;--pane-h:460px;background:var(--br-bar)}
 .pane.pane-br::before{z-index:2}
 .pane.pane-br .pane-bar{z-index:1;padding-left:0}
 .pane.pane-br .pane-head{position:absolute;z-index:1;right:10px;top:8px;width:108.5px;height:36px;border-radius:18px;background:var(--pill);box-shadow:inset 0 0 0 1px var(--pill-ring),0 4px 32px var(--pill-sh)}

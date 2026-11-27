@@ -502,8 +502,8 @@ columns (`Apple.md | 2 KB | [selected]`) and are not counted as one.
 
 **Options.** `iconSize:"large"` (HTML: `data-icon-size="large"`) puts the icons view and desktop at 128px icons (class
 `pane-lg`: `--is:128px;--k:2;--cw:176px;--lw:168px`; the artwork is vector, scaled; px-drawn captions scale with `--k`).
-`toolbar:"view"` (`data-toolbar="view"`) adds Finder's view-mode button to the toolbar: a glass pill with the icon-grid
-glyph and a chevron, drawn on the existing `.pane-head` node (hidden in the icons view otherwise), class `pane-vb`.
+`toolbar:"view"` (`data-toolbar="view"`) adds Finder's view-mode button to the toolbar: Tahoe's four-segment switcher (icons, list, columns, gallery, icons selected): a glass pill with the icon-grid
+glyph first and a grey selected segment, drawn on the existing `.pane-head` node (hidden in the icons view otherwise), class `pane-vb`.
 It is off by default because the icons capture (`macos-*-icons`) has back/forward only; the Blot study captures have it.
 
 **Names.** Finder wraps a name over two lines and shortens a longer one in the middle (`longer-n...cated.jpg`). CSS cannot
@@ -689,7 +689,7 @@ and the default skin takes them, exactly as with the icons view; an `os` pin for
   (Safari's tool buttons). `.pane-page` is the flexible remainder (`flex:1`), white by default; a skin may inset or round it
   (Edge's page has a rounded border). The skin sets the default size with `.pane.pane-br{--pane-w:…;--pane-h:…}` (an inline
   `style` wins) and the folder skin's `.pane::before`, `.pane-bar` and `.pane-head` rules must be overridden, as for the editors.
-- **macOS (Safari, Tahoe, compact layout)** measures to the 2x capture: window 600x400, radius 26 and the folder window's
+- **macOS (Safari, Tahoe, compact layout)** measures to the 2x capture: window 760x460 (600x400 before 28 Nov), radius 26 and the folder window's
   shadow, a 52px toolbar row; the lights and the back/forward pill are the folder window's (`mac.css`: `.pane::before`,
   `.pane-bar::before/::after`); the address field is a 36px pill at x=185 (`.pane-url`; its `::before` is the reader/page-menu
   icon, `::after` reload, the padlock is `.pane-u-h::before`), the glyph pill is `.pane-head` at right:10px, 108.5px wide, one

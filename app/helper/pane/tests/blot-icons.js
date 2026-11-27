@@ -63,7 +63,7 @@ describe("pane long names", function () {
       }
     ).html;
     expect(html).toMatch(
-      /<span class="pane-m" style="--n:9">fly-with-even-longer-name-that-gets-trun<\/span><span class="pane-e">cated\.jpg<\/span>/
+      /<span class="pane-m" style="--n:8">fly-with-even-longer-name-that-gets-trunc<\/span><span class="pane-e">ated\.jpg<\/span>/
     );
     expect(html.match(/pane-m/g).length).toBe(1); // only the long one
   });
@@ -133,7 +133,7 @@ describe("pane icons in Chrome", function () {
             )
           ).size
       );
-    expect(await columns("567px")).toBe(4);
+    expect(await columns("567px")).toBe(5); // the hero capture: Finder fits five 112px columns in 567pt
     expect(await columns("440px")).toBe(3);
     expect(await columns("700px")).toBe(6);
   });

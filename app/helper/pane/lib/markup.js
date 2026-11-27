@@ -49,11 +49,12 @@ const estimate = (name) =>
       (NARROW.test(c) ? 3.6 : WIDE.test(c) ? 10 : /[A-Z0-9]/.test(c) ? 8 : 6.4),
     0
   );
-const TWO_LINES = 190;
-function splitName(name) {
-  if (estimate(name) <= TWO_LINES) return null;
-  const ext = /\.[^.\s]{1,8}$/.exec(name);
-  const tail = Math.min(name.length - 1, (ext ? ext[0].length : 3) + 5);
+// Finder cuts the second line in its middle: the end it keeps is about half a line ("ated.jpg" under
+// 64px icons, whose label is 104px wide; "runcated.jpg" under 128px ones, 144px wide), about 6px a character.
+function splitName(name, large) {
+  const line = large ? 144 : 104;
+  if (estimate(name) <= line * 1.8) return null; // two lines, less what wrapping at a hyphen loses
+  const tail = Math.min(name.length - 1, Math.round((line / 6 - 1) / 2));
   return [name.slice(0, -tail), name.slice(-tail)];
 }
 
@@ -192,7 +193,7 @@ function folder(tree, options = {}) {
         const picture = url
           ? `<img src="${escape(url)}" alt="" loading="lazy" decoding="async">`
           : "";
-        const split = splitName(n.name);
+        const split = splitName(n.name, large);
         const text = split
           ? `<span class="pane-m" style="--n:${split[1].length}">${escape(split[0])}</span><span class="pane-e">${escape(split[1])}</span>`
           : label(n);
