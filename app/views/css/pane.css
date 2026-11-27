@@ -47,8 +47,9 @@ body .pane[data-view="list"] .pane-tree::after {
   margin: 0;
 }
 
-.home-template-folder .pane .pane-tree::after,
-.template-folder-wrapper .pane .pane-tree::after {
+/* (as specific as the spacer rule above, so they win) */
+body .home-template-folder .pane[data-view] .pane-tree::after,
+body .template-folder-wrapper .pane[data-view] .pane-tree::after {
   display: none;
 }
 
