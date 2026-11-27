@@ -2,6 +2,7 @@ const normalize = require("models/tags").normalize;
 const tagSlug = require("../retrieve/helpers/tagSlug");
 const type = require("helper/type");
 const backlinksFor = require("./backlinks");
+const eventDate = require("./eventDate");
 const moment = require("moment");
 require("moment-timezone");
 
@@ -34,6 +35,37 @@ module.exports = async function augment(
   entry.formatDate = FormatDate(entry.dateStamp, req.blog.timeZone);
   entry.formatUpdated = FormatDate(entry.updated, req.blog.timeZone);
   entry.formatCreated = FormatDate(entry.created, req.blog.timeZone);
+
+  // An Event line that is a date (./eventDate.js) gets the same formatting
+  // helper as the entry's own date, and says whether the event is still to
+  // come. A line that isn't a date is left for the template to show as it is.
+  const event = eventDate(entry.metadata, req.blog.timeZone);
+  if (event) {
+    // A repeating event is shown at its next occurrence
+    const nextStamp = eventDate.next(event, Date.now(), req.blog.timeZone);
+    const stamp = nextStamp !== null ? nextStamp : event.stamp;
+    entry.formatEvent = FormatDate(stamp, req.blog.timeZone);
+    // A multi-day event's last day, moved along with a repeating one, and
+    // the day after it, which calendar feeds use as the (exclusive) end
+    const endsDay = eventDate.endsOn(event, stamp, req.blog.timeZone);
+    if (endsDay !== null) {
+      entry.formatEnds = FormatDate(endsDay, req.blog.timeZone);
+      entry.formatEndsAfter = FormatDate(
+        moment.tz(endsDay, req.blog.timeZone).add(1, "day").valueOf(),
+        req.blog.timeZone
+      );
+    }
+    entry.event = {
+      stamp,
+      allDay: event.allDay,
+      timed: !event.allDay,
+      multiDay: !!event.endsDay,
+      repeats: event.repeats || false,
+      rrule: eventDate.rrule(event, req.blog.timeZone),
+      upcoming: nextStamp !== null,
+      past: nextStamp === null,
+    };
+  }
 
   entry.absoluteURL = absoluteURL(req.blog.locals.blogURL, entry.url);
 

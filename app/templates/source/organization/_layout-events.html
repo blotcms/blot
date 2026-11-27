@@ -1,0 +1,28 @@
+{{! Events: what's coming up (every event of this tag still to come, soonest first), then this tag's posts, the past ones with their dates. A post is an event when its Event line is a date (Event: 2026-12-08 18:30). }}
+{{! Every one of this tag's events still to come, not just the home page's four }}
+{{^posts.pagination.previous}}
+{{#all_upcoming_events.length}}
+<h2 class="section-heading section-heading--split"><span>Upcoming</span> <a class="quiet" href="/calendar.ics">Add to your calendar</a></h2>
+<div class="upcoming">
+  {{#all_upcoming_events}}{{> upcoming-item}}{{/all_upcoming_events}}
+</div>
+{{/all_upcoming_events.length}}
+{{/posts.pagination.previous}}
+<h2 class="section-heading">Past</h2>
+<div class="events">
+  {{#posts}}
+  {{^event.upcoming}}
+  <article class="event{{#event}} is-past{{/event}}">
+    <div>{{#event}}{{> when}}{{/event}}{{^event}}{{#date}}<time class="quiet" datetime="{{#formatDate}}YYYY-MM-DD{{/formatDate}}">{{#formatDate}}MMM D, YYYY{{/formatDate}}</time>{{/date}}{{/event}}</div>
+    <div class="event-details">
+      <h3 class="row-title"><a href="{{{url}}}">{{title}}</a></h3>
+      {{> labels}}
+      {{#metadata.venue}}<div><i>{{metadata.venue}}</i></div>{{/metadata.venue}}
+      {{#metadata.speaker}}<div>{{metadata.speaker}}</div>{{/metadata.speaker}}
+      {{#summary}}<div class="quiet">{{summary}}</div>{{/summary}}
+    </div>
+    <div class="row-image">{{#thumbnail.small.url}}<a href="{{{url}}}" tabindex="-1" aria-hidden="true"><img src="{{{thumbnail.small.url}}}" srcset="{{{thumbnail.small.url}}} {{thumbnail.small.width}}w, {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w" sizes="(min-width: 40rem) 23vw, 48vw" width="{{thumbnail.small.width}}" height="{{thumbnail.small.height}}" alt="" loading="lazy"></a>{{/thumbnail.small.url}}</div>
+  </article>
+  {{/event.upcoming}}
+  {{/posts}}
+</div>

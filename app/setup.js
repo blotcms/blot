@@ -112,6 +112,24 @@ async function runPostListenTasks() {
 
   try {
     // Any process may claim a due alarm, so every one that runs jobs polls
+    // for blogs whose listed events have changed (an occurrence ended), to
+    // bump their cacheID
+    if (runsJobs) {
+      log("Starting event change alarms asynchronously");
+      const { alarm } = require("blog/render/eventAlarm");
+      alarm.start();
+      require("helper/drain").onStart(() => {
+        alarm
+          .stop()
+          .catch((err) => logError("Failed to stop event change alarms", err));
+      });
+    }
+  } catch (err) {
+    logError("Failed to start event change alarms", err);
+  }
+
+  try {
+    // Any process may claim a due alarm, so every one that runs jobs polls
     if (runsJobs) {
       log("Starting welcome email alarm");
       const welcomeEmailAlarm =

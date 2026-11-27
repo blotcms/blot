@@ -1,0 +1,88 @@
+/* Each tag's row looks and behaves like the select rows above it
+   (select.css): the tag on the left, its layout on the right. */
+.tag-layouts__rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tag-layouts__row,
+.tag-layouts__add {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  position: relative;
+  padding: var(--select-control-padding);
+  font-size: var(--select-control-font-size);
+  border-bottom: 1px solid var(--light-border-color);
+  cursor: pointer;
+}
+
+.tag-layouts__add {
+  border-bottom: none;
+}
+
+.tag-layouts__add[hidden] {
+  display: none;
+}
+
+.tag-layouts__row:hover,
+.tag-layouts__add:hover {
+  background-color: var(--light-background-color);
+}
+
+.tag-layouts__tag {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tag-layouts__row select {
+  /* Only the room the tag's name leaves, so the name isn't cut short */
+  flex: 1 1 0;
+  min-width: 5.5em;
+  appearance: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: var(--select-control-font-size);
+  color: var(--text-color);
+  padding-right: 1.125em;
+  text-align: right;
+}
+
+/* A row left at the default reads quieter than one with its own layout */
+.tag-layouts__row select.is-default {
+  color: var(--light-text-color);
+}
+
+.tag-layouts__row::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: var(--select-dropdown-icon-right);
+  width: 1em;
+  height: 1em;
+  margin-top: -0.5em;
+  opacity: var(--select-dropdown-icon-opacity);
+  transform: rotate(90deg);
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='m11.28 3.22 4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.749.749 0 0 1-1.275-.326.749.749 0 0 1 .215-.734L13.94 8l-3.72-3.72a.749.749 0 0 1 .326-1.275.749.749 0 0 1 .734.215Zm-6.56 0a.751.751 0 0 1 1.042.018.751.751 0 0 1 .018 1.042L2.06 8l3.72 3.72a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L.47 8.53a.75.75 0 0 1 0-1.06Z'/></svg>");
+  background-size: 1em;
+  pointer-events: none;
+}
+
+.tag-layouts__row:hover::before {
+  opacity: var(--select-dropdown-icon-opacity-hover);
+}
+
+/* The tag picker is the native select, invisible over the link */
+.tag-layouts__add select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+}

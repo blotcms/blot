@@ -22,6 +22,8 @@ Restart resilience, left over from #2918 (22 Nov 2026). A deploy gives each proc
 - Reminder for the maintainer (21 Nov 2026): send the two drafted emails to the customers whose iCloud folders were shared with Blot "View only" and were disconnected during the #2874 migration (the blog IDs are in the gitignored `data/icloud-readonly-shares-2026-11-20.txt`; the drafts were written on 21 Nov).
 - Reminder for the maintainer (21 Nov 2026): dismiss CodeQL alerts 1018, 1053 and 1054 (triaged in the iCloud session on 21 Nov).
 
+Preview slots and the main stack share Redis but not their in-process template caches (20 Nov 2026): a SITE template rebuilt on a slot (`scripts/development/preview.sh`) updates the views in Redis, but `blot.localhost` kept rendering a stale `entries.html` for the stampclub blog until `Template.setMetadata` was called from the main container. Have template rebuilds on a slot publish the same invalidation the main stack listens for.
+
 Script runner (21 Nov 2026): `scripts/prod/run-script.js` starts its container from the app image without `--no-healthcheck`. The image's health check asks OpenResty, which the runner doesn't run, so the container goes unhealthy and `config/host/scripts/check_docker_health.sh` restarts it every 3 minutes (seen with render probes on 21 Nov, which now pass `--no-healthcheck`, #2904). A runner script longer than a few minutes is restarted from the start each time. Add `--no-healthcheck` to its `docker run`, and check its README's note on long backfills.
 
 - `blot.im/templates/<name>` pages block the event loop: `/templates/album` took 12.7s with `elu=1.00` on green node-a a minute after the 20 Nov 11:50 deploy, so every Redis call on that process timed out (6s socket timeout), its alarms reported Redis unavailable and it lost its leases; `/templates/portfolio` 4.4s and `/templates/studio` 4.1s the same morning. Again on 21 Nov at 05:47, two minutes after the deploy of 85db1b92d: `/templates/portfolio` took 7.2s with `elu=0.94` on blue node-a, a 6.5s loop block, so its Redis calls timed out and it dropped every Google Drive lease (the other process took them over). And on 21 Nov, hours after the 14:47 deploy of 03c1aa624, so not only cold after a deploy: `/templates/portfolio` 5.2s and `/templates/keynote` 4.2s on blue node-a (16:52-16:53), `/templates/studio` 4.1s and `/templates/magazine` 4.6s on green node-a (17:23, 17:47), each with `elu=1.00` and a matching 4-5s `[EVENT LOOP]` lag; each was that page's only request in 3 hours, so it looks like a first render per page per process. Again on 22 Nov, 2.5 h after the 11:03 deploy of 6dada2803: `/templates/portfolio` 4.7s (13:28) and `/templates/studio` 4.1s (13:29) on blue node-a, `elu=1.00`, with 4.7s and 4.1s `[EVENT LOOP]` lags. Not seen since: from 23 to 26 Nov no `/templates/<name>` request took over 1s (slowest 0.85s, most about 0.2s at `elu` above 0.9). Nothing changed those pages; #2945 (23 Nov) stopped production syncing the demo blogs at boot in node-a, which may have been what blocked it. If it comes back, find the synchronous work in the page's render. Remove this entry if it hasn't recurred by 10 Dec. (20 Nov 2026, checked 26 Nov for #2990)
@@ -208,7 +210,6 @@ Git sync (#2259 PR 4): a sync interrupted part way leaves already-applied paths 
 
 Speed up ci / simplify proxy and e2e testing slightly
 
-
 ---
 
 Set up Redis redundancy using a primary on the main server, a replica on the Frankfurt server, and three Redis Sentinel instances (main, Frankfurt, Mac) for automatic failover with quorum 2. Configure Node.js to discover the current primary via Sentinel. When the original main server recovers, it should rejoin as a replica; restore it as primary through a controlled manual failback using SENTINEL FAILOVER.
@@ -262,7 +263,6 @@ How to reduce likelihood of downtime?
 - are we well insulated from bunny failures (dns failover here too?)
 - are we well insulated from cloudflare failures (they do our DNS records or is it route53?)
 - are we as well insulated from most likely aws issues?
-
 
 ---
 
@@ -680,7 +680,6 @@ Create a new template local '{{{system-css}}}' which merges `{{{appCSS}}}, {{{fo
 
 Secure deploy ssh on GitHub
 
-
 Add GitHub deploy button for openresty 
 
 ---
@@ -853,7 +852,6 @@ Move image zoom plugin to templates
         inject required JS just above {{{appJS}}} and save
       disable image zoom plugin
   Remove image zoom plugin
-
 
 Reduce service provider risk:
 - move domain registrar from AWS to Epik?
@@ -1079,7 +1077,6 @@ Add theme with photoswipe and use sharp's tile generation feature along with
 
 Add way to set the slug-part of a URL for a post and tell [George](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLsdBjKHPdsRXJBGSbxpQQCbCN) and follow up for [post in Questions](https://blot.im/questions/23) and tell [Jarrod](https://mail.google.com/mail/u/0/#inbox/FMfcgzGqQcpsRhzFwxVGFJLLTRsFFGKj)
 
-
 ---
 
 Investigate migrating from Redis to SQLite per-blog database
@@ -1101,7 +1098,6 @@ Improve backlink's tolerance
   - Tell [Eli](https://mail.google.com/mail/u/0/#inbox/FMfcgzGlkFlwSwXGrFZwvSKdHKvcxplV)
 - Add support for internal links without a leading slash
   - Tell Laurel
-
 
 ---
 

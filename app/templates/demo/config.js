@@ -25,6 +25,16 @@ module.exports = {
     title: "Documentation",
     template: "SITE:documentation",
   },
+  stamps: {
+    title: "New York Stamp Club",
+    template: "SITE:organization",
+    menu: [
+      { url: "/", label: "Home", id: "front" },
+      { url: "/about", label: "About", id: "/Pages/About.txt" },
+      { url: "/visit", label: "Visit", id: "/Pages/Visit.txt" },
+      { url: "/join", label: "Join", id: "/Pages/Join.txt" },
+    ],
+  },
   lecture: {
     title: "The Cartography of Solitude",
     template: "SITE:event",
@@ -43,6 +53,10 @@ module.exports = {
   sergey: {
     title: "Sergey Prokudin-Gorsky",
     template: "SITE:album",
+  },
+  toni: {
+    title: "Toni Frissell",
+    template: "SITE:gallery",
   },
   sky: {
     title: "Skies",

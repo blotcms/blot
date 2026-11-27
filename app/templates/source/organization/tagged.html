@@ -1,54 +1,25 @@
 <!DOCTYPE html>
-<html lang="en">
-
-{{> head}}
-
-<body>
-
-  {{> header}}
-
-  <!-- Content -->
-  <main role="main" class="site-content">
-    <div class="container">
-
-      
-      <div class="row mt-3">
-
-        <div class="col-md-8 main-loop">
-
-          <h4 class="font-weight-bold spanborder"><span>{{tag}}</span></h4>
-
-
-          {{#entries}}
-          <div class="mb-2 d-flex justify-content-between main-loop-card">
-            <div class="pr-3">
-              <a class="text-dark" href="{{{url}}}">{{title}} <small class="text-muted">{{#date}}{{date}}{{/date}}</small></a>
-            </div>
-          </div>
-          {{/entries}}
-
-          {{#entries.pagination}}
-          <div class="pagination">
-            {{#previous}}
-            <a href="/tagged/{{slug}}/page/{{previous}}">&larr; Previous</a>
-            {{/previous}}
-            Page {{current}} of {{total}}
-            {{#next}}
-            <a href="/tagged/{{slug}}/page/{{next}}">Next &rarr;</a>
-            {{/next}}
-          </div>
-          {{/entries.pagination}}
-
-
-        </div>
-
-        
-
-      </div>
-
-    </div>
-  </main>
-  {{> footer}}
-</body>
-
+<html dir="auto">
+  {{> head}}
+  <body class="index-page">
+    {{> header}}
+    <main id="main">
+      {{> masthead}}
+      <h1 class="section-heading">{{tag}} <a class="quiet" href="/archives">· Everything</a></h1>
+      {{! Each tag's layout is chosen in the template's settings, under Tag pages (tag_layouts in package.json); the rest use the default, tag_layout. }}
+      {{#posts.length}}
+      {{#layout_for_tag.rows}}<div class="rows">{{#posts}}{{> post-row}}{{/posts}}</div>{{/layout_for_tag.rows}}
+      {{#layout_for_tag.grid}}{{> layout-grid}}{{/layout_for_tag.grid}}
+      {{#layout_for_tag.events}}{{> layout-events}}{{/layout_for_tag.events}}
+      {{#layout_for_tag.list}}{{> layout-list}}{{/layout_for_tag.list}}
+      {{#layout_for_tag.timeline}}{{> layout-timeline}}{{/layout_for_tag.timeline}}
+      {{#layout_for_tag.people}}{{> layout-people}}{{/layout_for_tag.people}}
+      {{/posts.length}}
+      {{^posts.length}}
+      <p class="empty">Nothing is filed under {{tag}}.</p>
+      {{/posts.length}}
+      {{#posts.pagination}}{{#next}}{{> tag-pages}}{{/next}}{{^next}}{{#previous}}{{> tag-pages}}{{/previous}}{{/next}}{{/posts.pagination}}
+    </main>
+    {{> footer}}
+  </body>
 </html>

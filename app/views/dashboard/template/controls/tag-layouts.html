@@ -1,0 +1,29 @@
+{{#default}}{{> select}}{{/default}}
+<form method="post" class="tag-layouts" data-tag-layouts data-hidden="{{hidden}}">
+  <input type="hidden" name="_csrf" value="{{csrftoken}}" />
+  <ul class="tag-layouts__rows">
+    {{#rows}}
+    <li class="tag-layouts__row" data-slug="{{slug}}">
+      <label class="tag-layouts__tag" for="tag-layout.{{slug}}">{{name}}</label>
+      <select id="tag-layout.{{slug}}">
+        {{#options}}<option value="{{value}}" {{selected}}>{{label}}</option>{{/options}}
+      </select>
+    </li>
+    {{/rows}}
+  </ul>
+  <div class="tag-layouts__add"{{^tags.length}} hidden{{/tags.length}}>
+    <span class="link">Choose a layout for a tag</span>
+    <select aria-label="Choose a layout for a tag" data-add-tag>
+      <option value=""></option>
+      {{#tags}}<option value="{{slug}}">{{name}}</option>{{/tags}}
+    </select>
+  </div>
+  <template data-row>
+    <li class="tag-layouts__row">
+      <label class="tag-layouts__tag"></label>
+      <select>
+        {{#options}}<option value="{{value}}" {{selected}}>{{label}}</option>{{/options}}
+      </select>
+    </li>
+  </template>
+</form>
