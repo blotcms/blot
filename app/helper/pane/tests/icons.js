@@ -82,7 +82,7 @@ describe("pane icons view markup", function () {
 describe("pane icons view skins", function () {
   it("is built for macOS only for now, so other skins fall back to it", function () {
     expect(css.viewsOf("mac")).toEqual(["list", "icons", "desktop", "browser"]);
-    expect(css.viewsOf("win")).toEqual(["list"]);
+    expect(css.viewsOf("win")).toEqual(["list", "browser"]);
     expect(css.viewsOf("linux")).toEqual(["list"]);
     const mac = css.group("mac");
     expect(mac).toContain(
