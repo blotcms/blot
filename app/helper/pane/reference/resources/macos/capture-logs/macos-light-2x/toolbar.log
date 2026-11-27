@@ -6,7 +6,7 @@ before:
     "TB Size Mode" = 1;
 }
 standard list view settings before:
-2026-11-27 16:02:28.158 defaults[1448:7872] 
+2026-11-27 16:11:50.402 defaults[1383:7706] 
 The domain/default pair of (com.apple.finder, FK_StandardViewSettings) does not exist
 after:
 {
