@@ -709,9 +709,11 @@ and the default skin takes them, exactly as with the icons view; an `os` pin for
   (`screenshots/linux.sh`) loads the study's page over HTTPS from `browser-server.py` at `https://preview-of-cv-on-clara.blot.im/`
   (an `/etc/hosts` entry; a self-signed CA:TRUE certificate added with `update-ca-certificates`, which GNOME Web's TLS backend, GnuTLS,
   reads), so the field shows the padlock.
-- **QA.** Cases `macos-{light,dark}-browser` (region `titlebar` is the top 52px), `linux-{light,dark}-browser` (GNOME Web) and, for the
-  next skin, `windows-{light,dark}-browser` (Edge), informational in `qa/thresholds.json` until the skin exists (drop the flag and
-  tighten with the skin). `qa/pane-adapter.js` renders every OS's case with the
+- **QA.** Cases `macos-{light,dark}-browser` (region `titlebar` is the top 52px), `linux-{light,dark}-browser` (GNOME Web; header bar 51px incl.
+  the frame, then the page; about 0.7% of the header bar and 1.5% of the page differ, the page because WebKit and Blink lay
+  the same text out up to 1px apart vertically) and, for the next skin, `windows-{light,dark}-browser` (Edge), informational in
+  `qa/thresholds.json` until the skin exists (drop the flag and tighten with the skin). The Linux case names Cantarell as the page's
+  font (`qa/pane-adapter.js`): GNOME Web resolves `system-ui` to it, the runner's Chrome to DejaVu Sans. `qa/pane-adapter.js` renders every OS's case with the
   capture's page (`screenshots/fixture-assets/browser-page`, images inlined) at the reference's window size. The macOS capture
   loads that page, the study's, from a local HTTPS server as `https://preview-of-cv-on-clara.blot.im/` (`screenshots/macos.sh`,
   `screenshots/linux.sh`); the Windows reference is still on example.com until its capture script follows. `qa/lib/audit.js` has browser
