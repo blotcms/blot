@@ -36,6 +36,16 @@
 //            (the copy around it may say "Finder"); only that OS's markup is emitted
 //   theme    "light" | "dark": pin the colour scheme (default: prefers-color-scheme)
 //   width, height   CSS lengths, set as --pane-w / --pane-h (default: the reference size)
+//   iconSize "large": the icons view (and desktop) at 128px icons instead of 64px (macOS Finder's large icons)
+//   toolbar  "view": the icons view's toolbar also shows Finder's view-mode button (icon grid and chevron)
+//
+// A row of the tree may carry attributes in square brackets after a pipe, which are not columns:
+//   Blot | [selected]                  drawn selected: the grey icon backing and blue name (icons view),
+//                                      the blue row (list view); "selected" is added for screen readers
+//   Toucan.jpg | [img=/images/t.jpg]   icons view: that picture, in proportion, is the icon (http(s), a
+//                                      path or an image data URI; anything else is ignored)
+// In the icons view a name too long for two lines is shortened in the middle, as Finder does (the end,
+// with the extension, stays).
 //
 // Editor windows (text, code) take the same title, os, theme, width, height, now, plus
 //   title     the file name in the title bar and the window's accessible name ("Text"/"Code" if absent)
@@ -151,6 +161,8 @@ function transform($, options = {}) {
             c !== "code" && resolveLanguage(c) && resolveLanguage(c) !== "plain"
         ) ||
         undefined,
+      iconSize: $(el).attr("data-icon-size") || undefined,
+      toolbar: $(el).attr("data-toolbar") || undefined,
       width: $(el).attr("data-width") || undefined,
       height: $(el).attr("data-height") || undefined,
     });

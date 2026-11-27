@@ -174,6 +174,11 @@ capture() { screencapture -x -R$((L - 96)),$((T - 96)),$((R - L + 192)),$((B - T
 sleep 4
 capture "macos-$THEME$SUFFIX"
 
+# the same list with the "Fruits" folder row selected (the blue selected row; its folder is open)
+osascript -e 'tell application "Finder" to activate' -e 'tell application "Finder" to select item "Fruits" of (target of front Finder window)' >>"$OUT/finder.log" 2>&1
+sleep 2
+capture "macos-$THEME$SUFFIX-listsel"
+
 # the other Finder views: icons, columns, gallery
 for v in "icon view:icons" "column view:columns" "flow view:gallery"; do
   osascript -e "tell application \"Finder\" to set current view of front Finder window to ${v%%:*}" -e 'delay 3' >>"$OUT/finder.log" 2>&1
@@ -359,6 +364,98 @@ osascript -e 'tell application "Safari" to quit' >>"$OUT/browser.log" 2>&1
 sudo pkill -f browser-server.py >>"$OUT/browser.log" 2>&1
 osascript -e 'tell application "TextEdit" to quit' >>"$OUT/browser.log" 2>&1
 sleep 2
+# Blot icons study (the Finder hero and the icon states): the study's own window. A folder named
+# "Blot" holding a "Blot" folder, three photos (real thumbnails, one with a name too long for two
+# lines), Post.md and Atlas.html, in icon view with a toolbar of just back/forward, the title and the
+# view-mode button (icon grid and chevron) at the right. Captures, per theme:
+#   -hero      64pt icons, nothing selected          -iconssel   the "Blot" folder and Toucan.jpg selected
+#   -large     128pt icons, nothing selected         -largesel   the "Blot" folder selected
+# The earlier list-view toolbar (back/forward only) is untouched: it was captured above.
+clear_stage "hero"
+HERO="$HOME/Documents/Blot"
+rm -rf "$HERO"; mkdir -p "$HERO/Blot"
+cp "$HERE"/fixture-assets/hero/*.jpg "$HERO/"
+cp "$HERE/fixture-assets/notes.md" "$HERO/Post.md"
+cp "$HERE/fixture-assets/checker.html" "$HERO/Atlas.html"
+{
+  PB=/usr/libexec/PlistBuddy
+  $PB -c 'Delete ":NSToolbar Configuration Browser:TB Item Identifiers"' "$PLIST" || true
+  $PB -c 'Add ":NSToolbar Configuration Browser:TB Item Identifiers" array' "$PLIST"
+  i=0
+  for id in com.apple.finder.BACK NSToolbarFlexibleSpaceItem com.apple.finder.SWCH; do
+    $PB -c "Add \":NSToolbar Configuration Browser:TB Item Identifiers:$i\" string $id" "$PLIST"; i=$((i+1))
+  done
+  killall cfprefsd; killall Finder; sleep 4
+  echo "hero toolbar:"; defaults read com.apple.finder "NSToolbar Configuration Browser"
+} >> "$OUT/toolbar.log" 2>&1
+clear_stage "hero, toolbar set"
+hero_opts() {  # icon size; every setting is best-effort
+  osascript >>"$OUT/hero.log" 2>&1 <<OSA
+tell application "Finder"
+  tell icon view options of front Finder window
+    try
+      set icon size to $1
+    end try
+    try
+      set text size to 12
+    end try
+    try
+      set arrangement to arranged by name
+    end try
+    try
+      set label position to bottom
+    end try
+    try
+      set shows item info to false
+    end try
+  end tell
+end tell
+OSA
+  sleep 3
+}
+hero_select() {  # names to select (none: clear the selection); Finder stays frontmost so the selection is blue
+  local list="" n
+  for n in "$@"; do list="$list${list:+, }item \"$n\" of t"; done
+  osascript >>"$OUT/hero.log" 2>&1 <<OSA
+tell application "Finder"
+  activate
+  set t to target of front Finder window
+  set selection to {$list}
+end tell
+OSA
+  sleep 2
+}
+BOUNDS="$(osascript 2>>"$OUT/hero.log" <<OSA
+tell application "Finder"
+  activate
+  set w to make new Finder window to (POSIX file "$HERO" as alias)
+  set current view of w to icon view
+  set bounds of w to {150, 150, 717, 560}
+  return sidebar width of w
+end tell
+OSA
+)"
+echo "hero sidebar width: $BOUNDS" >> "$OUT/bounds.txt"
+# the sidebar is hidden for every window once hidden (View > Hide Sidebar), so only toggle it if it shows
+if [ "${BOUNDS:-0}" != 0 ]; then
+  osascript -e 'tell application "System Events" to tell process "Finder" to keystroke "s" using {command down, option down}' >>"$OUT/hero.log" 2>&1
+  sleep 1
+fi
+BOUNDS="$(osascript -e 'tell application "Finder" to return bounds of front Finder window' 2>>"$OUT/hero.log")"
+echo "hero bounds: $BOUNDS" >> "$OUT/bounds.txt"
+IFS=', ' read -r L T R B <<< "$BOUNDS"
+hero_opts 64
+hero_select
+sleep 2
+capture "macos-$THEME$SUFFIX-hero"
+hero_select Blot Toucan.jpg
+capture "macos-$THEME$SUFFIX-iconssel"
+hero_opts 128
+hero_select
+capture "macos-$THEME$SUFFIX-large"
+hero_select Blot
+capture "macos-$THEME$SUFFIX-largesel"
+osascript -e 'tell application "Finder" to close every window' >>"$OUT/hero.log" 2>&1
 # Desktop icons: the "Your site" contents (files and the Fruits folder) as icons on the
 # desktop itself. The grey window sits at the desktop level, below Finder's icons. The
 # Dock is hidden and the capture starts under the menu bar.

@@ -267,7 +267,11 @@ check, accessibility and mobile audit), the folder list view, icons view and des
 light and dark, the folder list view for Windows 11 and GNOME Files in light and dark, editor windows
 (macOS skin; Windows and Linux get the macOS look), fresh build-time dates, and the docs build rendering
 `pre.folder`, `pre.text` and `pre.code` with pane (`data-view="desktop"` on `pre.folder` for loose icons,
-no window).
+no window). The macOS icons view also has the Blot study features (DESIGN.md, "The Blot study"): row attributes
+`[selected]` and `[img=URL]` (selection, picture thumbnails), names cut in the middle, `iconSize:"large"` and
+`toolbar:"view"`. Their macOS reference captures (`hero`, `iconssel`, `large`, `largesel`, `listsel`) are in
+`screenshots/macos.sh` but not yet captured (held until the macOS 26.7 references land), so their QA cases and
+thresholds do not exist yet.
 Not built: Windows/Linux skins for the icons view, desktop view and editor windows (visitors on those
 OSes see the macOS look, by design); retiring `tools/finder`. Open decisions: whether docs code blocks should be coloured (GNOME highlights;
 TextEdit/Notepad are plain), whether to keep `pane-name` (nothing in the docs uses it yet). Later items: the

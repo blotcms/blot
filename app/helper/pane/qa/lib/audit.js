@@ -16,6 +16,8 @@ const MANY = Array.from(
   { length: 16 },
   (_, i) => `File ${String(i + 1).padStart(2, "0")}.md`
 ).join("\n");
+const PIXEL =
+  "data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=";
 const SAMPLES = {
   small: {
     tree: "Fruits\n  Apple.md\n  Pear.md\nAbout.txt\nReport.docx\nPhoto.jpg",
@@ -39,6 +41,15 @@ const SAMPLES = {
     options: { view: "icons", height: "180px", title: "Fixed" },
   },
   fixed: { tree: "a.md\nb.md", options: { height: "180px", title: "Fixed" } },
+  // the Blot study (DESIGN.md, "Icons view"): selection, a thumbnail, a name cut in the middle, the view button
+  studyIcons: {
+    tree: `Blot | [selected]\nToucan.jpg | [selected] | [img=${PIXEL}]\nfly-with-even-longer-name-that-gets-truncated.jpg | [img=${PIXEL}]\nPost.md`,
+    options: { view: "icons", toolbar: "view", title: "Blot" },
+  },
+  studyLarge: {
+    tree: `Blot | [selected]\nToucan.jpg | [img=${PIXEL}]\nPost.md`,
+    options: { view: "icons", iconSize: "large", title: "Blot" },
+  },
 };
 
 // The editor windows. `expect` is what the body's text must be exactly: token spans, line
@@ -439,7 +450,14 @@ async function audit(
         }
         await emulate({ "prefers-reduced-motion": "no-preference" });
         // narrow containers: the columns drop in the documented order, and nothing spills out
-        for (const sample of ["small", "long", "icons", "iconsLong"]) {
+        for (const sample of [
+          "small",
+          "long",
+          "icons",
+          "iconsLong",
+          "studyIcons",
+          "studyLarge",
+        ]) {
           const seen = [];
           for (const width of [WIDE, ...NARROW]) {
             await page_(skin, theme, sample, width);
@@ -473,7 +491,11 @@ async function audit(
                   message: "the column header is shown in the icons view",
                 },
               ]);
-            if (l.labelWidth !== null && l.labelWidth < 60)
+            if (
+              l.labelWidth !== null &&
+              l.labelWidth < 60 &&
+              !sample.startsWith("study") // its first name is a selected pill that hugs the text
+            )
               add(skin, theme, sample, width, [
                 {
                   rule: "columns",
