@@ -89,7 +89,7 @@ describe("pane icons view skins", function () {
       "text",
       "code",
     ]);
-    expect(css.viewsOf("win")).toEqual(["list"]);
+    expect(css.viewsOf("win")).toEqual(["list", "browser"]);
     expect(css.viewsOf("linux")).toEqual(["list"]);
     const mac = css.group("mac");
     expect(mac).toContain(
