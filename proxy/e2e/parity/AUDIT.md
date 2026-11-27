@@ -54,6 +54,7 @@ Tests: **RM** = `request-matrix.js` (section number), **CH** = `checks.sh`,
 | `/sites`, `/sites/<handle>*` (dashboard, per-user, sessions) | all | `/sites`, regex (`reverse-proxy-huge.conf`, 1000 MB, writes to green) | no | P:site-uncached, P:webhook | |
 | `/sites/log-in`, `sign-up`, `account/password` | all | regex (4 KB body) | no | P:site-uncached | |
 | `/sites/<h>/import*`, `/sites/<h>/client/dropbox/authenticate` | all | regex, pinned to `blot_node` | no | P:site-uncached | |
+| `/sites/account/subscription/delete` | all | regex, writes to `blot_node` (it takes folder locks, #2990), reads to node-a | no | P:site-uncached | |
 | `/sites/<h>/status` (SSE) | GET | regex (`reverse-proxy-sse.conf`) | no, unbuffered | P:sse (h1, h2) | |
 | `/clients/*` (Dropbox, Google Drive webhooks and OAuth, iCloud macserver uploads, git smart HTTP) | all | `/clients`, `/clients/git/end/` (2000 MB) | no | P:webhook, P:site-uncached | |
 | `/stripe-webhook`, `/paypal-webhook`, `/redis-health` | all | exact `location`s | no | P:webhook, P:site-uncached | |
