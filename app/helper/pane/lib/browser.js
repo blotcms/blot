@@ -49,6 +49,24 @@ function parseUrl(raw) {
   };
 }
 
+// "preview-of-cv-on-clara.blot.im" -> the labels before the registered domain ("preview-of-cv-on-clara."), which GNOME Web
+// dims. A rough rule rather than the public suffix list: the last two labels, three when the last is a two-letter country code
+// under a short second level (co.uk, com.au). An IP address or a single label has none.
+const subdomain = (host) => {
+  const name = host.replace(/:\d+$/, "");
+  const labels = name.split(".");
+  if (labels.length < 3 || /^[\d.]+$/.test(name) || name.includes(":"))
+    return "";
+  const n =
+    labels[labels.length - 1].length === 2 &&
+    labels[labels.length - 2].length <= 3
+      ? 3
+      : 2;
+  return labels.length > n
+    ? labels.slice(0, labels.length - n).join(".") + "."
+    : "";
+};
+
 const safeSrc = (src) => {
   const s = String(src || "").trim();
   if (!s) return "";
@@ -100,7 +118,11 @@ function browser(options) {
     address =
       `<span class="pane-u-s">${escape(url.scheme)}</span>` +
       (url.www ? `<span class="pane-u-w">www.</span>` : "") +
-      `<span class="pane-u-h">${escape(url.host)}</span>` +
+      `<span class="pane-u-h">${
+        subdomain(url.host)
+          ? `<span class="pane-u-b">${escape(subdomain(url.host))}</span>`
+          : ""
+      }${escape(url.host.slice(subdomain(url.host).length))}</span>` +
       `<span class="pane-u-p${url.root ? " pane-u-r" : ""}">${escape(url.path)}</span>`;
 
   let page = "";
