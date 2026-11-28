@@ -68,6 +68,13 @@ describe("redis.conf", function () {
     ].forEach((name) => expect(only(name)).toBe("yes"));
   });
 
+  it("keeps hashes and sorted sets with values up to 256 bytes compact", function () {
+    expect(only("hash-max-ziplist-value")).toBe("256");
+    expect(only("zset-max-ziplist-value")).toBe("256");
+    expect(config["hash-max-ziplist-entries"]).toBeUndefined();
+    expect(config["zset-max-ziplist-entries"]).toBeUndefined();
+  });
+
   it("is last in the kill order, with its BGSAVE child first", function () {
     const setup = read("host/setup.sh");
     expect(only("oom-score-adj")).toBe("relative");
