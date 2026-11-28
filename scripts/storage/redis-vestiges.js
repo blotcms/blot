@@ -17,8 +17,12 @@
 //                    would mean reading every entry); Entry.set always adds
 //                    a deleted entry to it
 //   deleted-blogs    deletes blog:<id>:* and template:<id>:* of blogs which
-//                    have no info and are not in the blogs set (a removal which
-//                    failed part way); the bucket and Bunny are not touched
+//                    are gone: not in the blogs set (or the set of removals
+//                    in progress) and with no info, or with an info hash which
+//                    has neither a handle nor an owner (a "ghost": a late
+//                    write, such as a status or cacheID, recreated it after
+//                    the removal). A removal which failed part way is the
+//                    first case; the bucket and Bunny are not touched
 //   dropbox-members  removes blog IDs from clients:dropbox:<account> sets
 //                    when the blog is gone, is on another client, or its
 //                    Dropbox account is another or missing (webhooks only
@@ -52,6 +56,43 @@
 //                    domains which have one), or is a subdomain of the host,
 //                    which the wildcard certificate covers. Only :latest is
 //                    deleted, it is the only auto-ssl key we can see in proxy/
+//   ssl-history      deletes ssl:<domain>:<13 digit time> strings, the old
+//                    certificate versions an old lua-resty-auto-ssl kept
+//                    (2017-2020). The auto-ssl we vendor (proxy/Dockerfile)
+//                    reads only ssl:<domain>:latest; the name must end in
+//                    exactly 13 digits, so :latest, :challenge:*, the locks
+//                    and ssl:renewal-pass-lock are never matched
+//   ssl-challenges   deletes ssl:<domain>:challenge:<token> strings with no
+//                    TTL, the ACME tokens auto-ssl leaves when an issuance
+//                    fails (it sets no expiry; new ones get a TTL and expire
+//                    by themselves). Candidates are collected, then looked
+//                    at again after a wait (10 minutes), and only the ones
+//                    which still exist with no TTL are deleted, so a live
+//                    issuance is never touched
+//   lookups          deletes handle:<h> and domain:<d> whose value is a blog
+//                    which is gone (see deleted-blogs) or an all-digit ID
+//                    of the old numeric format, and email:<e>, customer:<c>
+//                    and paypal:<p> whose value is a user which is gone (in
+//                    no uids set and with no record) or an all-digit ID.
+//                    A handle which names a live blog stays, even a former
+//                    one (Blog.set keeps those for redirects). Values of
+//                    another shape are left alone and counted. Each key is
+//                    read again 5 seconds later and deleted only if its
+//                    value is the same and still dangling
+//   removed-users    deletes user:<uid>:* (git token and status, ...) of
+//                    accounts which were removed: the uid is in no uids set
+//                    and has no record, on two looks 5 seconds apart (create
+//                    writes both in one multi, so one being created is seen
+//                    with both). A uid with a record but not in the uids
+//                    set is not touched, its ID is printed for review
+//   legacy           deletes the keys of removed code: image:dimensions:*,
+//                    switch-blog-id-format:*, sync:again:*, sync:lease:*,
+//                    keys of numeric blog IDs (blog:<digits>:*, the blog_
+//                    IDs never match) and blot:stats, analytics:all,
+//                    analytics:today, blot:backups:daily, blot:backups:hourly
+//                    and storage:folder:mirror:complete. Nothing reads or
+//                    writes them (user remove still deletes sync:lease and
+//                    sync:again of a uid, which is harmless). Any type
 //   all              every subcommand above in turn
 //
 // The keys of removed features are not here: run remove-ignored-files.js and
@@ -72,6 +113,7 @@ const client = require("models/client");
 const Blog = require("models/blog");
 const entryKey = require("models/entry/key");
 const templateKey = require("models/template/key");
+const userKey = require("models/user/key");
 const folderLock = require("sync/lock");
 const {
   DELETED_ENTRY_TTL_SECONDS,
@@ -287,9 +329,25 @@ const BLOG_KEY = /^(?:blog|template):(blog_[a-f0-9]+):/;
 const OWNED_KEY =
   /^template:(?:owned_by|folder_pending_removal|folder_fresh):(blog_[a-f0-9]+)$/;
 
+// A blog is alive when it is in the blogs set or being removed, or its info
+// hash has a handle or an owner. An info hash with neither is a ghost: a late
+// write (status, cacheID, client, imageExif) recreated it after the blog was
+// removed. A key of another type is left alone, as alive.
 async function blogExists(blogID) {
-  if (await client.exists("blog:" + blogID + ":info")) return true;
-  return !!(await client.sIsMember(Blog.key.ids, blogID));
+  if (await client.sIsMember(Blog.key.ids, blogID)) return true;
+  if ((await client.zScore(Blog.key.removing, blogID)) !== null) return true;
+
+  const info = "blog:" + blogID + ":info";
+  const type = await client.type(info);
+
+  if (type === "none") return false;
+  if (type !== "hash") return true;
+
+  const multi = client.multi();
+  multi.hExists(info, "handle");
+  multi.hExists(info, "owner");
+
+  return (await multi.exec()).some(Boolean);
 }
 
 // Deletes the keys the scan found for a blog (the patterns Blog.remove's
@@ -837,6 +895,359 @@ async function ssl({ apply = false, only = "*", now = Date.now() } = {}) {
   return result;
 }
 
+// ---- ssl-history ----
+
+const SSL_HISTORY = /^ssl:(.+):\d{13}$/;
+
+async function sslHistory({ apply = false, only = "*" } = {}) {
+  const result = { found: 0, deleted: 0, estimatedBytes: 0 };
+  const sample = sampler();
+
+  for await (const page of scan("ssl:" + only + ":*")) {
+    const keys = (await ofType(page, "string")).filter((key) =>
+      SSL_HISTORY.test(key)
+    );
+
+    result.found += keys.length;
+    for (const key of keys) await sample.add(key);
+
+    if (apply && keys.length) result.deleted += await client.del(keys);
+  }
+
+  result.estimatedBytes = sample.estimate(result.found);
+
+  console.log(
+    "ssl-history: " +
+      result.found +
+      " old certificate versions, about " +
+      size(result.estimatedBytes) +
+      ". " +
+      verb(apply, "Deleted " + result.deleted, "Would delete them")
+  );
+
+  return result;
+}
+
+// ---- ssl-challenges ----
+
+const SSL_CHALLENGE = /^ssl:(.+):challenge:.+$/;
+const CHALLENGE_WAIT_MS = 10 * 60 * 1000;
+
+// The keys which are strings with no TTL, from a list of keys
+async function noTTL(keys) {
+  const multi = client.multi();
+
+  for (const key of keys) {
+    multi.type(key);
+    multi.ttl(key);
+  }
+
+  const replies = await multi.exec();
+
+  return keys.filter(
+    (key, i) => replies[i * 2] === "string" && replies[i * 2 + 1] === -1
+  );
+}
+
+async function sslChallenges({
+  apply = false,
+  only = "*",
+  wait = CHALLENGE_WAIT_MS,
+} = {}) {
+  const result = { found: 0, deleted: 0, estimatedBytes: 0 };
+  const sample = sampler();
+  const candidates = []; // key names only: there are many
+
+  for await (const page of scan("ssl:" + only + ":challenge:*")) {
+    for (const key of await noTTL(page.filter((k) => SSL_CHALLENGE.test(k)))) {
+      candidates.push(key);
+      await sample.add(key);
+    }
+  }
+
+  result.found = candidates.length;
+  result.estimatedBytes = sample.estimate(result.found);
+
+  if (apply && candidates.length) {
+    // An issuance in progress has a token with no TTL for a moment: only
+    // the ones which still exist, with still no TTL, after the wait go
+    await pause(wait);
+
+    for (let i = 0; i < candidates.length; i += BATCH) {
+      const still = await noTTL(candidates.slice(i, i + BATCH));
+
+      if (still.length) result.deleted += await client.del(still);
+    }
+  }
+
+  console.log(
+    "ssl-challenges: " +
+      result.found +
+      " ACME challenge tokens with no TTL, about " +
+      size(result.estimatedBytes) +
+      ". " +
+      verb(apply, "Deleted " + result.deleted, "Would delete them")
+  );
+
+  return result;
+}
+
+// ---- lookups ----
+
+const LOOKUP_WAIT_MS = 5000;
+const USER_ID = /^user_[A-Za-z0-9]+$/;
+const DIGITS = /^\d+$/;
+
+// handle: and domain: hold a blog ID, the others a user ID
+const LOOKUPS = {
+  handle: "blog",
+  domain: "blog",
+  email: "user",
+  customer: "user",
+  paypal: "user",
+};
+
+async function userExists(uid) {
+  if (await client.sIsMember(userKey.uids, uid)) return true;
+  return !!(await client.exists(userKey.user(uid)));
+}
+
+// "dangling", "live" or "unrecognised" for what a lookup key's value names
+async function judge(kind, value) {
+  if (typeof value !== "string") return "unrecognised";
+  if (DIGITS.test(value)) return "dangling";
+
+  if (kind === "blog") {
+    if (!BLOG_ID.test(value)) return "unrecognised";
+    return (await blogExists(value)) ? "live" : "dangling";
+  }
+
+  if (!USER_ID.test(value)) return "unrecognised";
+  return (await userExists(value)) ? "live" : "dangling";
+}
+
+async function lookups({
+  apply = false,
+  only = "*",
+  wait = LOOKUP_WAIT_MS,
+} = {}) {
+  const result = {
+    scanned: 0,
+    dangling: 0,
+    unrecognised: 0,
+    deleted: 0,
+    estimatedBytes: 0,
+  };
+  const sample = sampler();
+  const pending = []; // [key, kind, value]
+
+  for (const prefix of Object.keys(LOOKUPS)) {
+    for await (const page of scan(prefix + ":" + only)) {
+      const strings = await ofType(page, "string");
+      if (!strings.length) continue;
+
+      const values = await mget(strings);
+
+      for (let i = 0; i < strings.length; i++) {
+        const verdict = await judge(LOOKUPS[prefix], values[i]);
+
+        result.scanned++;
+
+        if (verdict === "unrecognised") result.unrecognised++;
+        if (verdict !== "dangling") continue;
+
+        result.dangling++;
+        await sample.add(strings[i]);
+        pending.push([strings[i], LOOKUPS[prefix], values[i]]);
+      }
+    }
+  }
+
+  result.estimatedBytes = sample.estimate(result.dangling);
+
+  if (apply && pending.length) {
+    // The target may be being created, or the key rewritten: deleted only
+    // if the value is the same and still dangling after the wait
+    await pause(wait);
+
+    for (const [key, kind, value] of pending) {
+      if ((await client.type(key)) !== "string") continue;
+      if ((await client.get(key)) !== value) continue;
+      if ((await judge(kind, value)) !== "dangling") continue;
+
+      result.deleted += await client.del(key);
+    }
+  }
+
+  console.log(
+    "lookups: " +
+      result.dangling +
+      " of " +
+      result.scanned +
+      " lookup keys name a blog or user which is gone, about " +
+      size(result.estimatedBytes) +
+      "; " +
+      result.unrecognised +
+      " unrecognised, left alone. " +
+      verb(apply, "Deleted " + result.deleted, "Would delete them")
+  );
+
+  return result;
+}
+
+// ---- removed-users ----
+
+const USER_KEY = /^user:(user_[A-Za-z0-9]+):/;
+const USER_WAIT_MS = 5000;
+
+// "removed" (in no uids set, no record), "review" (a record, but not in the
+// uids set) or "live". User create writes the uids entry and the record in
+// one multi, so an account being created is never "removed".
+async function userState(uid) {
+  const record = !!(await client.exists(userKey.user(uid)));
+
+  if (await client.sIsMember(userKey.uids, uid)) return "live";
+
+  return record ? "review" : "removed";
+}
+
+async function removedUsers({
+  apply = false,
+  only = "*",
+  wait = USER_WAIT_MS,
+} = {}) {
+  const result = {
+    users: [],
+    review: [],
+    keys: 0,
+    deleted: 0,
+    estimatedBytes: 0,
+  };
+  const sample = sampler();
+  const found = new Map(); // uid -> its keys
+  const gone = new Map();
+
+  for await (const page of scan("user:" + only + ":*")) {
+    for (const key of page) {
+      const match = USER_KEY.exec(key);
+
+      if (!match) continue;
+      if (!found.has(match[1])) found.set(match[1], new Set());
+
+      found.get(match[1]).add(key);
+    }
+  }
+
+  for (const [uid, keys] of found) {
+    const state = await userState(uid);
+
+    if (state === "review") result.review.push(uid);
+    if (state !== "removed") continue;
+
+    gone.set(uid, keys);
+    result.keys += keys.size;
+
+    for (const key of keys) await sample.add(key);
+  }
+
+  result.users = Array.from(gone.keys()).sort();
+  result.review.sort();
+  result.estimatedBytes = sample.estimate(result.keys);
+
+  if (apply && gone.size) {
+    await pause(wait);
+
+    for (const [uid, keys] of gone) {
+      if ((await userState(uid)) !== "removed") continue;
+
+      const list = Array.from(keys);
+
+      for (let i = 0; i < list.length; i += BATCH)
+        result.deleted += await client.del(list.slice(i, i + BATCH));
+    }
+  }
+
+  for (const uid of result.review)
+    console.log("  " + uid + ": has a record but is not in the uids set, left");
+
+  console.log(
+    "removed-users: " +
+      result.users.length +
+      " removed accounts have " +
+      result.keys +
+      " keys, about " +
+      size(result.estimatedBytes) +
+      "; " +
+      result.review.length +
+      " with a record but not in the uids set, for review. " +
+      verb(apply, "Deleted " + result.deleted, "Would delete them")
+  );
+
+  return result;
+}
+
+// ---- legacy ----
+
+const LEGACY_PREFIXES = [
+  "image:dimensions:",
+  "switch-blog-id-format:",
+  "sync:again:",
+  "sync:lease:",
+];
+const LEGACY_NUMERIC_BLOG = /^blog:\d+:/;
+const LEGACY_EXACT = [
+  "blot:stats",
+  "analytics:all",
+  "analytics:today",
+  "blot:backups:daily",
+  "blot:backups:hourly",
+  "storage:folder:mirror:complete",
+];
+
+async function legacy({
+  apply = false,
+  only = "*",
+  exact = only === "*" ? LEGACY_EXACT : [],
+} = {}) {
+  const result = { found: 0, deleted: 0, estimatedBytes: 0 };
+  const sample = sampler();
+
+  async function take(keys) {
+    result.found += keys.length;
+    for (const key of keys) await sample.add(key);
+
+    if (apply && keys.length) result.deleted += await client.del(keys);
+  }
+
+  for (const prefix of LEGACY_PREFIXES)
+    for await (const page of scan(prefix + only)) await take(page);
+
+  // Numeric IDs only: blog_ IDs and blog:SITE:* never match the regex
+  for await (const page of scan(
+    "blog:" + (only === "*" ? "[0-9]*" : only + ":*")
+  ))
+    await take(page.filter((key) => LEGACY_NUMERIC_BLOG.test(key)));
+
+  const present = [];
+
+  for (const key of exact) if (await client.exists(key)) present.push(key);
+
+  await take(present);
+
+  result.estimatedBytes = sample.estimate(result.found);
+
+  console.log(
+    "legacy: " +
+      result.found +
+      " keys of removed code, about " +
+      size(result.estimatedBytes) +
+      ". " +
+      verb(apply, "Deleted " + result.deleted, "Would delete them")
+  );
+
+  return result;
+}
+
 const SUBCOMMANDS = {
   "deleted-entries": deletedEntries,
   "deleted-blogs": deletedBlogs,
@@ -847,6 +1258,11 @@ const SUBCOMMANDS = {
   permalinks,
   rendered,
   ssl,
+  "ssl-history": sslHistory,
+  "ssl-challenges": sslChallenges,
+  lookups,
+  "removed-users": removedUsers,
+  legacy,
 };
 
 async function all(options) {
@@ -896,6 +1312,11 @@ module.exports = {
   permalinks,
   rendered,
   ssl,
+  sslHistory,
+  sslChallenges,
+  lookups,
+  removedUsers,
+  legacy,
 };
 
 if (require.main === module) {

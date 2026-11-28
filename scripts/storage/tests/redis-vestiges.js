@@ -320,4 +320,239 @@ describe("scripts/storage/redis-vestiges", function () {
       await client.exists("ssl:vestiges-sub-fresh." + config.host + ":latest")
     ).toBe(1);
   });
+
+  it("deleted-blogs treats an info hash with no handle or owner as a ghost", async function () {
+    var ghost = "blog_" + "1a2b3c4d".repeat(4);
+    var owned = "blog_" + "2a2b3c4d".repeat(4);
+    var listed = "blog_" + "3a2b3c4d".repeat(4);
+    var ghostKeys = [
+      remember("blog:" + ghost + ":info"),
+      remember("blog:" + ghost + ":all"),
+    ];
+    var ownedInfo = remember("blog:" + owned + ":info");
+    var listedInfo = remember("blog:" + listed + ":info");
+
+    await client.hSet(ghostKeys[0], { status: "{}", cacheID: "1" });
+    await client.set(ghostKeys[1], "x");
+    await client.hSet(ownedInfo, { owner: "user_x", cacheID: "1" });
+    await client.hSet(listedInfo, { cacheID: "1" });
+    await client.sAdd("blogs", listed);
+
+    try {
+      var report = await vestiges.deletedBlogs({ only: "blog_*" });
+
+      expect(report.blogs).toContain(ghost);
+      expect(report.blogs).not.toContain(owned);
+      expect(report.blogs).not.toContain(listed);
+      expect(await client.exists(ghostKeys)).toBe(2);
+
+      await vestiges.deletedBlogs({ only: ghost, apply: true });
+
+      expect(await client.exists(ghostKeys)).toBe(0);
+      expect(await client.exists([ownedInfo, listedInfo])).toBe(2);
+    } finally {
+      await client.sRem("blogs", listed);
+    }
+  });
+
+  it("ssl-history deletes certificate versions with a 13 digit time only", async function () {
+    var old = remember("ssl:vestiges-h.example:1500000000000");
+    var keep = [
+      remember("ssl:vestiges-h.example:latest"),
+      remember("ssl:vestiges-h.example:challenge:abc"),
+      remember("ssl:vestiges-h.example:issue_cert_lock"),
+      remember("ssl:vestiges-h.example:123456789012"),
+    ];
+
+    await client.set(old, "x");
+    for (var key of keep) await client.set(key, "x");
+
+    expect((await vestiges.sslHistory({ only: "vestiges-h*" })).found).toBe(1);
+    expect(await client.exists(old)).toBe(1);
+
+    await vestiges.sslHistory({ only: "vestiges-h*", apply: true });
+
+    expect(await client.exists(old)).toBe(0);
+    expect(await client.exists(keep)).toBe(4);
+  });
+
+  it("ssl-challenges deletes tokens with no TTL still without one after the wait", async function () {
+    var stuck = remember("ssl:vestiges-c.example:challenge:stuck");
+    var live = remember("ssl:vestiges-c.example:challenge:live");
+    var renewed = remember("ssl:vestiges-c.example:challenge:renewed");
+    var latest = remember("ssl:vestiges-c.example:latest");
+
+    await client.set(stuck, "x");
+    await client.set(live, "x", { EX: 600 });
+    await client.set(renewed, "x");
+    await client.set(latest, "x");
+
+    var report = await vestiges.sslChallenges({ only: "vestiges-c*" });
+
+    expect(report.found).toBe(2);
+    expect(await client.exists([stuck, renewed])).toBe(2);
+
+    // One gets a TTL during the wait, as an issuance in progress would
+    var run = vestiges.sslChallenges({
+      only: "vestiges-c*",
+      apply: true,
+      wait: 200,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await client.expire(renewed, 600);
+
+    var applied = await run;
+
+    expect(applied.deleted).toBe(1);
+    expect(await client.exists(stuck)).toBe(0);
+    expect(await client.exists([live, renewed, latest])).toBe(3);
+  });
+
+  it("lookups deletes keys which name a blog or user that is gone, not the rest", async function () {
+    var userKey = require("models/user/key");
+    var goneBlog = "blog_" + "4a2b3c4d".repeat(4);
+    var goneUser = "user_VESTIGESGONE";
+    var liveUser = "user_VESTIGESLIVE";
+    var dead = [
+      remember("handle:vestiges-gone"),
+      remember("domain:vestiges-gone.example"),
+      remember("handle:vestiges-numeric"),
+      remember("email:vestiges-gone@example.com"),
+      remember("customer:vestiges-gone"),
+      remember("paypal:vestiges-gone"),
+      remember("email:vestiges-numeric@example.com"),
+    ];
+    var kept = [
+      remember("handle:vestiges-live"),
+      remember("domain:vestiges-live.example"),
+      remember("handle:vestiges-odd"),
+      remember("email:vestiges-live@example.com"),
+      remember("customer:vestiges-live"),
+    ];
+
+    await client.set(dead[0], goneBlog);
+    await client.set(dead[1], goneBlog);
+    await client.set(dead[2], "12345");
+    await client.set(dead[3], goneUser);
+    await client.set(dead[4], goneUser);
+    await client.set(dead[5], goneUser);
+    await client.set(dead[6], "678");
+    await client.set(kept[0], this.blog.id);
+    await client.set(kept[1], this.blog.id);
+    await client.set(kept[2], "not an id");
+    await client.set(kept[3], liveUser);
+    await client.set(kept[4], liveUser);
+    await client.sAdd(userKey.uids, liveUser);
+
+    try {
+      var report = await vestiges.lookups({ only: "vestiges-*" });
+
+      expect(report.dangling).toBe(7);
+      expect(report.unrecognised).toBe(1);
+      expect(await client.exists(dead)).toBe(7);
+
+      var applied = await vestiges.lookups({
+        only: "vestiges-*",
+        apply: true,
+        wait: 0,
+      });
+
+      expect(applied.deleted).toBe(7);
+      expect(await client.exists(dead)).toBe(0);
+      expect(await client.exists(kept)).toBe(5);
+    } finally {
+      await client.sRem(userKey.uids, liveUser);
+    }
+  });
+
+  it("lookups leaves a key whose value changes during the wait", async function () {
+    var key = remember("handle:vestiges-changing");
+    var gone = "blog_" + "5a2b3c4d".repeat(4);
+
+    await client.set(key, gone);
+
+    var run = vestiges.lookups({ only: "vestiges-*", apply: true, wait: 200 });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await client.set(key, this.blog.id);
+
+    expect((await run).deleted).toBe(0);
+    expect(await client.get(key)).toBe(this.blog.id);
+  });
+
+  it("removed-users deletes the keys of a removed account, and only reports one with a record", async function () {
+    var userKey = require("models/user/key");
+    var removed = "user_VESTIGESRMD";
+    var orphan = "user_VESTIGESORP";
+    var live = "user_VESTIGESLV";
+    var dead = [
+      remember("user:" + removed + ":git:token"),
+      remember("user:" + removed + ":git:status"),
+      remember("user:" + removed + ":paypal_cancel_email:I-1"),
+    ];
+    var kept = [
+      remember("user:" + orphan + ":git:token"),
+      remember(userKey.user(orphan)),
+      remember("user:" + live + ":git:token"),
+      remember(userKey.user(live)),
+    ];
+
+    for (var key of dead.concat(kept)) await client.set(key, "x");
+    await client.sAdd(userKey.uids, live);
+
+    try {
+      var report = await vestiges.removedUsers({ only: "user_VESTIGES*" });
+
+      expect(report.users).toEqual([removed]);
+      expect(report.review).toEqual([orphan]);
+      expect(report.keys).toBe(3);
+      expect(await client.exists(dead)).toBe(3);
+
+      await vestiges.removedUsers({
+        only: "user_VESTIGES*",
+        apply: true,
+        wait: 0,
+      });
+
+      expect(await client.exists(dead)).toBe(0);
+      expect(await client.exists(kept)).toBe(4);
+    } finally {
+      await client.sRem(userKey.uids, live);
+    }
+  });
+
+  it("legacy deletes keys of removed code, not those of current blogs", async function () {
+    var dead = [
+      remember("image:dimensions:vestiges-1"),
+      remember("switch-blog-id-format:vestiges-1"),
+      remember("sync:again:vestiges-1"),
+      remember("sync:lease:vestiges-1"),
+      remember("blog:99001122:info"),
+      remember("blog:99001122:upload:file:x"),
+      remember("blot:stats"),
+    ];
+    var kept = [
+      remember("blog:" + this.blog.id + ":vestiges-legacy"),
+      remember("blog:SITE:vestiges-legacy"),
+      remember("blog:99001122x:info"),
+    ];
+
+    await client.hSet(dead[4], { handle: "x" });
+    for (var key of dead.slice(0, 4).concat(dead.slice(5), kept))
+      await client.set(key, "x");
+
+    // The exact keys are only looked for when the run is over everything,
+    // or the keys are given
+    var exact = ["blot:stats"];
+
+    var scoped = await vestiges.legacy({ only: "vestiges-1" });
+
+    expect(scoped.found).toBe(4);
+    expect(await client.exists(dead)).toBe(7);
+
+    await vestiges.legacy({ only: "vestiges-1", apply: true });
+    await vestiges.legacy({ only: "99001122", apply: true, exact: exact });
+
+    expect(await client.exists(dead)).toBe(0);
+    expect(await client.exists(kept)).toBe(3);
+  });
 });
