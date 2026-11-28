@@ -22,12 +22,14 @@ describe("Blog.set", function () {
   });
 
   it("changes nothing for a blog which is not in the blogs set", async function () {
+    const cacheID = await client.hGet(key.info(this.blog.id), "cacheID");
+
     await client.sRem(key.ids, this.blog.id);
 
     try {
       expect(await set(this.blog.id, { cacheID: Date.now() })).toEqual([]);
       expect(await client.hGet(key.info(this.blog.id), "cacheID")).toEqual(
-        String(this.blog.cacheID)
+        cacheID
       );
     } finally {
       await client.sAdd(key.ids, this.blog.id);

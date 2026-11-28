@@ -21,16 +21,22 @@ describe("Blog.setStatus", function () {
     const client = require("models/client");
     const key = require("../key");
 
+    await setStatus(this.blog.id, { message: "Before" });
+    const before = await client.hGet(key.info(this.blog.id), "status");
+    const length = await client.lLen(key.status(this.blog.id));
+
     await client.sRem(key.ids, this.blog.id);
-    await client.del([key.info(this.blog.id), key.status(this.blog.id)]);
 
-    await setStatus(this.blog.id, { message: "Late" });
+    try {
+      await setStatus(this.blog.id, { message: "Late" });
 
-    expect(await client.exists(key.info(this.blog.id))).toBe(0);
-    expect(await client.exists(key.status(this.blog.id))).toBe(0);
-
-    // Back in the set, so the blog helper's cleanup can remove it
-    await client.sAdd(key.ids, this.blog.id);
+      expect(await client.hGet(key.info(this.blog.id), "status")).toEqual(
+        before
+      );
+      expect(await client.lLen(key.status(this.blog.id))).toEqual(length);
+    } finally {
+      await client.sAdd(key.ids, this.blog.id);
+    }
   });
 
   it("fills in default values for a status", async function () {
