@@ -58,6 +58,29 @@ describe("template viewContent", function () {
     expect(view.content).toEqual(source);
   });
 
+  it("serves a view read again from this process, but never a changed one", async function () {
+    var zlib = require("zlib");
+    var decompress = spyOn(zlib, "brotliDecompressSync").and.callThrough();
+    var viewKey = "template:test:cache:view:a.html";
+    var first = await viewContent.pack(long);
+    var second = await viewContent.pack(long + "changed");
+
+    viewContent._clear();
+
+    expect(
+      (await viewContent.unpack({ contentBr: first }, viewKey)).content
+    ).toEqual(long);
+    expect(
+      (await viewContent.unpack({ contentBr: first }, viewKey)).content
+    ).toEqual(long);
+    expect(decompress.calls.count()).toBe(1);
+
+    expect(
+      (await viewContent.unpack({ contentBr: second }, viewKey)).content
+    ).toEqual(long + "changed");
+    expect(decompress.calls.count()).toBe(2);
+  });
+
   it("unpacks a view stored as written", async function () {
     var view = await viewContent.unpack({
       name: Buffer.from("a.html"),

@@ -14,7 +14,7 @@ async function readView(viewKey) {
 
   if (!hash || !Object.keys(hash).length) return null;
 
-  return deserialize(await viewContent.unpack(hash), viewModel);
+  return deserialize(await viewContent.unpack(hash, viewKey), viewModel);
 }
 
 module.exports = async function getView(templateID, viewID) {

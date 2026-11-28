@@ -16,6 +16,7 @@
 // fields as strings would be served Buffers, or the binary field mangled.
 const zlib = require("zlib");
 const { promisify } = require("util");
+const { LRUCache } = require("lru-cache");
 
 const brotliCompress = promisify(zlib.brotliCompress);
 const brotliDecompress = promisify(zlib.brotliDecompress);
@@ -37,6 +38,20 @@ const QUALITY = 5;
 // in the thread unless it is large enough to hold the event loop up
 // (32 KB compressed is about 150 KB of source, about 0.5 ms).
 const SYNC_MAX_BYTES = 32 * 1024;
+
+// Sources unpacked in this process, by view key: the compressed bytes they
+// came from and the source. A render cache refill (after a blog or template
+// cacheID bump) reads the same compressed bytes again, so it is served from
+// here and decompresses nothing; only a view's first read in a process, or
+// its first read after it changes, pays for decompression. A hit must match
+// the stored bytes exactly, so a changed view is never served stale. Bounded
+// by source bytes, as the client-side cache's view class was before views
+// were compressed (models/redis-cache).
+const unpacked = new LRUCache({
+  max: 8000,
+  maxSize: 16 * 1024 * 1024,
+  sizeCalculation: (value) => value.packed.length + value.source.length || 1,
+});
 
 // Resolves with the compressed source, or null to store it as written
 async function pack(content) {
@@ -72,8 +87,9 @@ function toText(value) {
 }
 
 // Turns a view hash read as Buffers into strings, with the source unpacked
-// into content. Resolves with a new object.
-async function unpack(hash) {
+// into content. viewKey names the hash, for the cache above. Resolves with
+// a new object.
+async function unpack(hash, viewKey) {
   const view = {};
 
   for (const field of Object.keys(hash)) {
@@ -84,15 +100,28 @@ async function unpack(hash) {
   // setView and the backfill each leave one of the two fields, in one
   // MULTI or script. Were both ever there, content would be what was written.
   if (hash[FIELD] !== undefined && view.content === undefined) {
-    const packed = toBuffer(hash[FIELD]);
-    const source =
-      packed.length <= SYNC_MAX_BYTES
-        ? zlib.brotliDecompressSync(packed)
-        : await brotliDecompress(packed);
-    view.content = source.toString("utf8");
+    view.content = await decompress(toBuffer(hash[FIELD]), viewKey);
   }
 
   return view;
 }
 
-module.exports = { FIELD, pack, unpack };
+async function decompress(packed, viewKey) {
+  const cached = viewKey !== undefined && unpacked.get(viewKey);
+
+  if (cached && cached.packed.equals(packed)) return cached.source;
+
+  const source = (
+    packed.length <= SYNC_MAX_BYTES
+      ? zlib.brotliDecompressSync(packed)
+      : await brotliDecompress(packed)
+  ).toString("utf8");
+
+  // A copy: packed may be a view onto the client-side cache's own clone
+  if (viewKey !== undefined)
+    unpacked.set(viewKey, { packed: Buffer.from(packed), source });
+
+  return source;
+}
+
+module.exports = { FIELD, pack, unpack, _clear: () => unpacked.clear() };
