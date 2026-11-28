@@ -52,26 +52,55 @@
   box-shadow: 0 12px 32px rgb(0 0 0 / 18%), 0 2px 6px rgb(0 0 0 / 10%);
 }
 
-/* On the documentation page it sits on the left, under the copy, below a
-   line the article's full width that opens the video too (how/index.html),
-   after riff 13's "See it in two minutes": a round play button, the line,
-   the length */
+/* On the documentation page, one row in a grey rounded box (the template
+   cards' grey): a line that opens the video, after riff 13's "See it in
+   two minutes" (a round play button, the words, the length), and the
+   thumbnail on the right, smaller than the homepage's (how/index.html) */
 .docs-video {
+  display: flex;
+  align-items: center;
+  gap: 24px;
   margin: 24px 0 8px;
+  padding: 16px 16px 16px 20px;
+  border-radius: 5px;
+  background: var(--surface-muted-color, #f4f3f1);
 }
 
 .docs-video .home-video {
-  margin: 24px 0 0;
+  --home-video-w: 160px;
+  flex: 0 0 auto;
+  margin: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* 160 / 1280, the smaller card's width over the scene's */
+.docs-video .home-video-scene {
+  transform: scale(0.125);
+}
+
+/* On phones the thumbnail is smaller still, so the words keep one line */
+@media (max-width: 520px) {
+  .docs-video {
+    gap: 16px;
+    padding-left: 16px;
+  }
+
+  .docs-video .home-video {
+    --home-video-w: 96px;
+  }
+
+  /* 96 / 1280 */
+  .docs-video .home-video-scene {
+    transform: scale(0.075);
+  }
 }
 
 .video-link {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   gap: 12px;
-  padding-top: 24px;
-  /* rgba(), not rgb( / ): the minifier drops a slash colour from a
-     border shorthand, leaving the text colour */
-  border-top: 1px solid rgba(22, 22, 21, 0.12);
+  min-width: 0;
   color: #161615;
   font-size: 14px;
   font-weight: 500;
