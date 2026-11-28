@@ -79,6 +79,7 @@ async function includedHosts(sites) {
     return sidebar.hosts;
 
   const hosts = new Set();
+  let failed = false;
 
   for (const site of sites) {
     try {
@@ -86,11 +87,13 @@ async function includedHosts(sites) {
       if (blog && !blog.isDisabled && blog.includeInDiscover === true)
         hosts.add(site.host);
     } catch (err) {
-      // leave the site out
+      // leave the site out of this page, but don't remember that: a Redis
+      // timeout (as when a unit starts) would hide it for the whole TTL
+      failed = true;
     }
   }
 
-  sidebar = { at: Date.now(), hosts };
+  if (!failed) sidebar = { at: Date.now(), hosts };
   return hosts;
 }
 
