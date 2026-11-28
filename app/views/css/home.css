@@ -690,7 +690,9 @@
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 48px var(--home-gap);
+  /* The names are inside the cards, so rows are one gutter apart, as the
+     columns are */
+  gap: var(--home-gap);
   margin-top: 24px;
 }
 
