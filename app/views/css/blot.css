@@ -244,18 +244,24 @@ background {
   margin-top: 0;
 }
 
+/* The notes under a hairline level with the cards' tops, their title in
+   the homepage rows' type, as Discover's People list is (css/discover.css) */
 .template-category-sidebar {
   grid-column: 3;
-  font-size: var(--small-font-size);
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+  font-size: 15px;
   color: var(--medium-text-color);
 }
 
 .wide-page .template-category-sidebar h2 {
-  font-size: var(--small-font-size);
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  color: var(--light-text-color);
-  margin: 0 0 0.75em;
+  margin: 0 0 12px;
+  color: var(--text-color);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.45;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .wide-page .template-category-sidebar ul {
@@ -292,6 +298,22 @@ background {
   .templates-controls {
     grid-column: 1 / -1;
     justify-content: flex-start;
+  }
+
+  /* The types scroll sideways inside the gutters rather than past them */
+  .templates-controls .folder-filters {
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .templates-controls .folder-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .templates-controls .folder-filters__item {
+    padding-inline: 8px;
   }
 }
 
@@ -994,51 +1016,35 @@ body.watch-page .main-section {
   font-size: var(--medium-font-size);
 }
 
-.pricing-panel {
-  width: 100%;
-  max-width: 100%;
-  padding: 32px;
-  margin: 0;
-}
-
-.pricing-panel__title {
-  max-width: none;
-  margin: 0 0 8px;
-  padding: 0;
-  color: var(--medium-text-color);
-  font-size: var(--font-size);
-  font-weight: 400;
+/* The pricing page (pricing.html), a wide page: the plan in the first
+   column, in the homepage's grey card, the questions and the note beside
+   it in columns two and three, in the homepage rows' 15px */
+.home.pricing-page {
+  font-size: 15px;
   line-height: 1.5;
 }
 
-.pricing-page {
-  max-width: 900px;
-  margin: 0 auto;
+.pricing-page .pricing-panel {
+  grid-column: 1;
+  grid-row: 2 / span 2;
+  box-sizing: border-box;
+  margin-top: 24px;
+  padding: 32px;
+  border-radius: 5px;
+  background: var(--surface-muted-color, #f4f3f1);
 }
 
-.pricing-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 430px) minmax(0, 1fr);
-  column-gap: 90px;
-  align-items: start;
-  margin-top: 3rem;
+.home.pricing-page .home-faq {
+  grid-row: 2;
+  margin-top: 24px;
 }
 
-.pricing-faq {
-  min-width: 0;
-}
-
-@media (min-width: 1051px) {
-  .pricing-panel {
-    padding-top: 56px;
-    padding-bottom: 56px;
-  }
-}
-
-.pricing-note {
-  margin-top: 32px;
-  padding-left: 16px;
-  color: var(--text-color);
+.home .pricing-note {
+  grid-column: 2 / span 2;
+  grid-row: 3;
+  max-width: 34em;
+  margin-top: 40px;
+  color: var(--medium-text-color);
 }
 
 .pricing-price {
@@ -1048,27 +1054,23 @@ body.watch-page .main-section {
   column-gap: 4px;
   row-gap: 0;
   color: var(--text-color);
-  font-size: calc(var(--font-size) + 4px);
+  font-size: 19px;
   font-weight: 400;
-  line-height: 1.2;
-  margin-bottom: 48px;
+  line-height: 28px;
+  margin-bottom: 32px;
   text-decoration: none;
 }
 
-.pricing-includes__label {
-  margin: 0 0 10px;
+.pricing-price:hover {
+  color: var(--text-color);
 }
 
 .pricing-panel .feature-list {
-  margin: 0 0 36px;
+  margin: 0 0 32px;
 }
 
 .pricing-panel .feature-list li {
   margin-bottom: 6px;
-}
-
-.pricing-panel .feature-list .icon-checkbox {
-  color: var(--text-color);
 }
 
 .pricing-panel .feature-list .icon-small-check {
@@ -1078,6 +1080,19 @@ body.watch-page .main-section {
   vertical-align: middle;
   top: 0;
   color: #b8bdc8;
+}
+
+@media (max-width: 768px) {
+  .pricing-page .pricing-panel,
+  .home.pricing-page .home-faq,
+  .home .pricing-note {
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
+
+  .home.pricing-page .home-faq {
+    margin-top: 40px;
+  }
 }
 
 .feature-list {
@@ -1099,22 +1114,6 @@ body.watch-page .main-section {
   margin-right: 8px;
 }
 
-/* The homepage's template card grey and corners (css/home.css) */
-.pricing-panel {
-  box-sizing: border-box;
-  border-radius: 5px;
-  background: var(--surface-muted-color, #f4f3f1);
-}
-
-@media (max-width: 1050px) {
-  .pricing-page {
-    max-width: 430px;
-  }
-  .pricing-layout {
-    grid-template-columns: minmax(0, 430px);
-    row-gap: 48px;
-  }
-}
 
 .home-avatar {
   position: relative;

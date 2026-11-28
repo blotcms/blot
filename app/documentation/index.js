@@ -112,11 +112,16 @@ documentation.get(
   require("./featured/filterByCategory")
 );
 
-// The template lists (templates/template-list.html) are laid out like the
-// homepage, so they are as wide as it: its main class drops the
-// documentation's side padding (css/home.css)
+// The template lists (templates/template-list.html) and the pricing page are
+// laid out like the homepage, so they are as wide as it: its main class
+// drops the documentation's side padding (css/home.css)
 documentation.get(
-  ["/templates", "/templates/for-:type", "/templates/search/:query"],
+  [
+    "/templates",
+    "/templates/for-:type",
+    "/templates/search/:query",
+    "/pricing",
+  ],
   (req, res, next) => {
     res.locals.mainClass = "home-content";
     next();
