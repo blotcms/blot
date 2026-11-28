@@ -283,6 +283,15 @@ html[data-auth="in"] .signed-in {
   flex-shrink: 0;
 }
 
+/* The links sit a little above the folder's top edge; on phones they keep
+   their own rows (below) */
+@media (min-width: 641px) {
+  .public-header .public-navigation,
+  .public-header .public-account {
+    margin-top: -4px;
+  }
+}
+
 .public-header .public-navigation a,
 .public-header .public-account a {
   display: block;
