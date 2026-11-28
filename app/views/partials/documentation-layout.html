@@ -15,6 +15,19 @@
   </aside>
 
   <main id="main" tabindex="-1" class="documentation-article main-section-content {{#show-toc-or-on-this-page}}js-toc-content{{/show-toc-or-on-this-page}}">
+    <!-- Where the page is, on the section title's line (documentation/
+         selected.js builds the trail; pages one level down have none) -->
+    {{^hidebreadcrumbs}}
+    {{#breadcrumbs.length}}
+    <nav class="documentation-breadcrumbs" aria-label="Breadcrumb">
+      <ol>
+        {{#breadcrumbs}}
+        <li>{{#last}}<span aria-current="page">{{label}}</span>{{/last}}{{^last}}<a href="{{{url}}}">{{label}}</a>{{/last}}</li>
+        {{/breadcrumbs}}
+      </ol>
+    </nav>
+    {{/breadcrumbs.length}}
+    {{/hidebreadcrumbs}}
     {{> body}}
   </main>
 

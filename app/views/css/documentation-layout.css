@@ -76,6 +76,51 @@ html:has(.documentation-layout)::-webkit-scrollbar-thumb {
   margin: 16px 0 0;
 }
 
+/* The breadcrumbs (partials/documentation-layout.html) take the line the
+   heading would, on the section title's baseline, in the sidebar links'
+   type; the heading follows */
+.documentation-breadcrumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  max-width: none;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  font-weight: 460;
+  line-height: 20px;
+  letter-spacing: -.04px;
+}
+
+.documentation-breadcrumbs li {
+  margin: 0;
+  padding: 0;
+}
+
+.documentation-breadcrumbs li + li::before {
+  margin: 0 8px;
+  color: rgb(18 18 18 / 25%);
+  content: "/";
+}
+
+.documentation-breadcrumbs a {
+  color: rgb(18 18 18 / 40%);
+  text-decoration: none;
+}
+
+.documentation-breadcrumbs a:hover {
+  color: var(--text-color);
+}
+
+.documentation-breadcrumbs [aria-current] {
+  color: var(--text-color);
+}
+
+.documentation-breadcrumbs + h1,
+.documentation-article > .documentation-breadcrumbs + h1 {
+  margin-top: 24px;
+}
+
 .documentation-article > h2 {
   margin: 64px 0 0;
   padding: 24px 0 0;
@@ -231,7 +276,8 @@ html:has(.documentation-layout)::-webkit-scrollbar-thumb {
     margin-bottom: 32px;
   }
 
-  .documentation-article > h1 {
+  .documentation-article > h1,
+  .documentation-breadcrumbs ol {
     margin-top: 0;
   }
 }
