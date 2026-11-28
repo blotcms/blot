@@ -816,6 +816,21 @@ async function removeAll(blogID) {
   await client.del([key.paths(blogID), key.totals(blogID)]);
 }
 
+// Deletes every key of a blog's index which removeAll's walk from the root
+// didn't reach: a directory's keys orphaned when older code, which read the
+// path set, removed its parent without it. Scans the whole keyspace, so it is
+// for rebuild only.
+async function sweepOrphans(blogID) {
+  for await (var found of client.scanIterator({
+    MATCH: "blog:" + blogID + ":file:*",
+    COUNT: PAGE,
+  })) {
+    var keys = Array.isArray(found) ? found : [found];
+
+    if (keys.length) await client.del(keys);
+  }
+}
+
 // Checks a directory's sorted set for one order against its hash, a page
 // at a time: { expected, present, card, bytes, longest }, where expected is
 // how many children belong in the set, present how many of them it holds,
@@ -1019,6 +1034,7 @@ async function rebuild(blogID, records) {
     kept.set(previous.path, previous);
 
   await removeAll(blogID);
+  await sweepOrphans(blogID);
 
   for await (var record of records) {
     var before = kept.get(normalize(record.path));

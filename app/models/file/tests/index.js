@@ -745,6 +745,22 @@ describe("models/file", function () {
       );
     });
 
+    it("sweeps keys of directories no walk from the root reaches", async function () {
+      // As an old unit, reading the path set, leaves them when it removes a
+      // parent without them
+      await client.hSet(File.key.dir(this.blog.id, "/gone/x"), "a", "f|1|1|");
+      await client.hSet(File.key.lower(this.blog.id, "/gone/x"), "a", "a");
+
+      await File.rebuild(this.blog.id, []);
+
+      expect(await client.exists(File.key.dir(this.blog.id, "/gone/x"))).toBe(
+        0
+      );
+      expect(await client.exists(File.key.lower(this.blog.id, "/gone/x"))).toBe(
+        0
+      );
+    });
+
     it("skips records which conflict with one before them, and reports them", async function () {
       var records = [
         { path: "/a", type: "file", size: 1, modified: MODIFIED },
