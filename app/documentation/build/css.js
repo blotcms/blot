@@ -19,6 +19,7 @@ const DASHBOARD_SHARED_FILES = [
   "css/hljs.css",
   "css/icons.css",
   "css/inputs.css",
+  "css/list-controls.css",
   "css/path.css",
   "css/steps.css",
   "css/truncate.css",

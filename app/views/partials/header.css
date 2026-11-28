@@ -203,7 +203,7 @@ html[data-auth="in"] .signed-in {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 24px;
   padding: 20px 22px 12px 17px;
 }
 
@@ -262,12 +262,19 @@ html[data-auth="in"] .signed-in {
   color: #fff;
 }
 
+/* Discover, Documentation and Pricing sit beside the logo; the account
+   links (Sign up and Log in, or Dashboard) on the right */
 .public-header .public-navigation {
   display: flex;
+  flex: 1;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: flex-start;
   align-items: flex-start;
-  gap: 4px;
+  gap: 10px;
+}
+
+.public-header .public-navigation .public-account {
+  margin-left: auto;
 }
 
 .public-header .public-navigation a {

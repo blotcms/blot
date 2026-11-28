@@ -327,26 +327,6 @@ h2 + .clients {margin-top: 0}
   margin-right: 8px;
 }
 
-.template-search input[type="search"] {
-  width: 100%;
-  max-width: 220px;
-  padding: 0.6em 0.85em;
-  font-family: inherit;
-  font-size: 16px;
-  color: var(--text-color);
-  background: var(--background-color);
-  border: 1px solid var(--border-color);
-  border-radius: 2em;
-  box-sizing: border-box;
-  box-shadow: inset 0 1px 2px 0 rgba(0, 0, 0, 0.075);
-}
-
-.template-search input[type="search"]:focus {
-  outline: none;
-  border-color: var(--accent-color);
-  box-shadow: inset 0 0 1px var(--accent-color);
-}
-
 /* Template gallery tiles: /templates and the dashboard's template list.
 
    <ul class="clients templates">

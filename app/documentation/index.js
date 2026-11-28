@@ -75,7 +75,17 @@ documentation.get(
 
 documentation.use(require("./selected"));
 
-documentation.get("/", home);
+// The video thumbnail (partials/video-thumbnail.html) on the homepage and the
+// documentation page
+documentation.get(["/", "/how"], require("./home-video"));
+
+// The homepage lists the latest finished work, as the Updates page does
+documentation.get(
+  "/",
+  require("./tools/git-commits").middleware,
+  require("./featured"),
+  home
+);
 
 // The old examples page, the featured sites with their profession filters,
 // is at /discover/people
@@ -100,6 +110,17 @@ documentation.get(
   "/discover/people/:category",
   require("./featured"),
   require("./featured/filterByCategory")
+);
+
+// The template lists (templates/template-list.html) are laid out like the
+// homepage, so they are as wide as it: its main class drops the
+// documentation's side padding (css/home.css)
+documentation.get(
+  ["/templates", "/templates/for-:type", "/templates/search/:query"],
+  (req, res, next) => {
+    res.locals.mainClass = "home-content";
+    next();
+  }
 );
 
 documentation.get("/templates", (req, res) => {

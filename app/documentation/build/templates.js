@@ -197,6 +197,8 @@ const BUILD_NOW = pane.isoNow();
 const folderHTMLForTemplate = (template, manifest) =>
   pane.folder(folderPreviewForTemplate(template, manifest), {
     title: template.name,
+    // The homepage shows it on hover: the folder's top level as icons
+    view: "icons",
     now: BUILD_NOW,
   }).html;
 
@@ -405,10 +407,15 @@ module.exports = async () => {
     filter: (src) => path.relative(viewsDirectory, src) !== "index.html",
   });
 
+  // The lists, most popular first (they had a Latest/Popular switch, which
+  // sorted in the browser)
+  const popular = (list) =>
+    [...list].sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+
   await renderView(
     "index.html",
     {
-      allTemplates: templates,
+      allTemplates: popular(templates),
       categories,
       cdn,
     },
@@ -425,8 +432,8 @@ module.exports = async () => {
           ...c,
           selected: c.slug === category.slug ? "selected" : "",
         })),
-        allTemplates: templates.filter((t) =>
-          category.templates.includes(t.slug)
+        allTemplates: popular(
+          templates.filter((t) => category.templates.includes(t.slug))
         ),
         sidebar: sidebarForCategory(category.slug),
         cdn,

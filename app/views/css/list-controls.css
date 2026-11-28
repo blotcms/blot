@@ -1,7 +1,7 @@
 /*
   List controls, shared by every list that filters or searches: the
-  folder (folder/folder-filters.html), its filter pages, search results and
-  the template list.
+  folder (dashboard/folder/folder-filters.html), its filter pages, search
+  results and the template list, and the brochure's /templates page.
 
   .folder-filters             a segmented control, like a Finder view
                               switcher: the chosen segment raised, the
@@ -13,6 +13,11 @@
                               posts are scheduled; none shows nothing)
   .site-dashboard-search      the search field: a form or wrapper holding
                               an input, like the Finder's
+
+  Shared with the documentation (build/css.js), where the brochure's
+  /templates page uses them too. Its pages don't load the dashboard's
+  tokens (dashboard/css/tokens.css), so each token here falls back to the
+  dashboard's own value.
 */
 
 .folder-filters {
@@ -20,18 +25,18 @@
   align-items: stretch;
   gap: 2px;
   padding: 2px;
-  border-radius: var(--radius-md);
-  background: var(--surface-muted-color);
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface-muted-color, #f7f7f5);
 }
 
 .folder-filters__item {
   display: inline-flex;
   align-items: center;
   min-height: 26px;
-  padding: 0 var(--space-3);
-  border-radius: calc(var(--radius-md) - 2px);
+  padding: 0 var(--space-3, 12px);
+  border-radius: calc(var(--radius-md, 8px) - 2px);
   color: var(--text-color);
-  font-size: var(--text-xs);
+  font-size: var(--text-xs, 12px);
   text-decoration: none;
   white-space: nowrap;
   transition: background-color 150ms ease, box-shadow 150ms ease;
@@ -44,16 +49,16 @@ button.folder-filters__item {
   border: 0;
   background: none;
   font: inherit;
-  font-size: var(--text-xs);
+  font-size: var(--text-xs, 12px);
   cursor: pointer;
 }
 
 .folder-filters__item:hover {
-  background: var(--surface-strong-color);
+  background: var(--surface-strong-color, #ececea);
 }
 
 .folder-filters__item:active {
-  background: var(--border-strong-color);
+  background: var(--border-strong-color, #d5d5d3);
 }
 
 .folder-filters__item.is-selected,
@@ -61,7 +66,7 @@ button.folder-filters__item {
 .folder-filters__item.is-active,
 .folder-filters__item[aria-pressed="true"] {
   background: var(--background-color);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.08));
 }
 
 .folder-filters__item:focus-visible {
@@ -76,10 +81,10 @@ button.folder-filters__item {
   min-width: 14px;
   height: 14px;
   box-sizing: border-box;
-  margin-left: var(--space-1);
+  margin-left: var(--space-1, 4px);
   padding: 0 3px;
-  border-radius: var(--radius-pill);
-  background: var(--surface-strong-color);
+  border-radius: var(--radius-pill, 999px);
+  background: var(--surface-strong-color, #ececea);
   color: var(--medium-text-color);
   /* Smaller than --text-xs: a badge, not text to read */
   font-size: 10px;
@@ -103,7 +108,7 @@ button.folder-filters__item {
   width: 100%;
   min-width: 0;
   height: 28px;
-  padding: 0 var(--space-2) 0 28px;
+  padding: 0 var(--space-2, 8px) 0 28px;
   border: 1px solid rgba(0, 0, 0, 0.14);
   border-radius: 7px;
   background: var(--background-color)
@@ -111,7 +116,7 @@ button.folder-filters__item {
     no-repeat 9px center / 14px 14px;
   color: var(--text-color);
   font: inherit;
-  font-size: var(--text-md);
+  font-size: var(--text-md, 14px);
   caret-color: var(--accent-color);
   -webkit-appearance: none;
   appearance: none;

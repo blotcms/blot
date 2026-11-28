@@ -161,87 +161,96 @@ background {
   color:var(--accent-color);
 }
 
-/* Category filters on the left, search + Latest/Popular on the right,
-   all on one row; wraps to its own line on narrow viewports. */
+/* Pages as wide as the homepage, under a title row like its Templates row
+   (css/home.css): a hairline 48px below the header, the 19px title under
+   it. /templates, its type pages and search results (templates/
+   template-list.html) put the list controls (css/list-controls.css) on the
+   right in place of the homepage's link; Discover (discover.html) has the
+   title alone. The documentation (css/documentation-layout.css) draws the
+   same hairline above its sidebar and article. */
 
-.templates-toolbar {
+/* The homepage's gutter and gap (main.home-content sets --home-gutter) */
+.home.wide-page {
+  --home-gap: var(--home-gutter, 30px);
+  padding-inline: var(--home-gutter, 30px);
+}
+
+.wide-page .home-row {
+  margin-top: 48px;
+  padding-bottom: 64px;
+}
+
+/* Discover's row holds the title alone; its feed follows (css/discover.css)
+   in .wide-page-body, with the same gutters */
+.wide-page .home-row.wide-page-title {
+  padding-bottom: 16px;
+}
+
+.wide-page-body {
+  padding-inline: var(--home-gutter, 30px);
+}
+
+.wide-page h1 {
+  grid-column: 1;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--text-color);
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 28px;
+  letter-spacing: -0.01em;
+}
+
+.templates-controls {
+  grid-column: 2 / span 2;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75em 1.5em;
-  margin-bottom: 0.5em;
+  justify-content: flex-end;
+  gap: 8px 12px;
 }
 
-.templates-toolbar .pill-navigation {
-  margin-bottom: 0;
-}
-
-.templates-toolbar-right {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75em;
-  margin-left: auto;
+.templates-controls .site-dashboard-search {
+  width: 220px;
+  margin-left: 0;
 }
 
 .template-search-status {
-  font-size: var(--small-font-size);
+  grid-column: 1 / -1;
+  margin: 24px 0 0;
   color: var(--light-text-color);
-  margin: 0 0 1.5em;
-  text-align: right;
+  font-size: var(--small-font-size);
 }
 
 .template-search-status:empty {
-  margin: 0;
-}
-
-.clients.templates .template-updated {
   display: none;
-  font-size: var(--small-font-size);
-  color: var(--light-text-color);
-  margin-top: 2px;
 }
 
-#template-grid[data-sort="latest"] .template-updated {
-  display: block;
+/* A type page: two columns of cards, its notes in the third */
+.templates-split {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: var(--home-gap);
+  align-items: start;
+  margin-top: 24px;
 }
 
-/* Category pages under /templates/for-:category can include a short,
-   factual sidebar (app/views/templates/sidebars/*.html) alongside the
-   template grid. Desktop-only two-column layout; stacks on mobile. */
-
-.templates-with-sidebar {
-  display: flex;
-  align-items: flex-start;
-  gap: 2.5em;
-}
-
-.templates-with-sidebar .clients.templates {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-/* Two per row instead of three, since the sidebar takes up a third
-   of the width and three columns would get cramped. Scoped to widths
-   above the existing 1148px/600px grid breakpoints below, which already
-   step down to 50% and 100% and should keep doing so once the sidebar
-   has stacked underneath the grid. */
-
-@media (min-width: 1149px) {
-  .templates-with-sidebar .clients.templates .template-item {
-    width: 50%;
-  }
+.wide-page .templates-split .home-template-grid {
+  grid-column: 1 / span 2;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 0;
 }
 
 .template-category-sidebar {
-  flex: 0 0 33.333%;
-  width: 33.333%;
+  grid-column: 3;
   font-size: var(--small-font-size);
   color: var(--medium-text-color);
 }
 
-.template-category-sidebar h2 {
+.wide-page .template-category-sidebar h2 {
   font-size: var(--small-font-size);
   text-transform: uppercase;
   letter-spacing: 0.02em;
@@ -249,33 +258,40 @@ background {
   margin: 0 0 0.75em;
 }
 
-.template-category-sidebar ul {
+.wide-page .template-category-sidebar ul {
   max-width: none;
   padding: 0;
   margin: 0;
   list-style: none;
 }
 
-.template-category-sidebar li {
+.wide-page .template-category-sidebar li {
   margin-bottom: 1.25em;
   line-height: 1.5;
 }
 
-.template-category-sidebar li a {
+.wide-page .template-category-sidebar li a {
   display: inline-block;
   margin-left: 0.35em;
   white-space: nowrap;
 }
 
-@media (max-width: 900px) {
-  .templates-with-sidebar {
-    flex-direction: column;
+@media (max-width: 1000px) {
+  .templates-split {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 32px;
   }
+
+  .wide-page .templates-split .home-template-grid,
   .template-category-sidebar {
-    width: 100%;
-    flex-basis: auto;
-    padding-top: 1em;
-    border-top: 1px solid var(--light-background-color);
+    grid-column: 1;
+  }
+}
+
+@media (max-width: 768px) {
+  .templates-controls {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
   }
 }
 
@@ -1083,10 +1099,11 @@ body.watch-page .main-section {
   margin-right: 8px;
 }
 
+/* The homepage's template card grey and corners (css/home.css) */
 .pricing-panel {
   box-sizing: border-box;
-  border-radius: 16px;
-  background: var(--light-background-color);
+  border-radius: 5px;
+  background: var(--surface-muted-color, #f4f3f1);
 }
 
 @media (max-width: 1050px) {

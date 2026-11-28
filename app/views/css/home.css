@@ -30,119 +30,202 @@
   letter-spacing: normal;
 }
 
-.home-portfolio .home-video-link {
-  display: flex;
-  align-items: center;
-  width: fit-content;
-  gap: 7px;
-  margin: 16px auto 0;
-  color: var(--brochure-accent-color);
-  font: 500 13px / 1.25 system-ui, sans-serif;
-  text-decoration: none;
-}
-
-.home-portfolio .home-video-link:hover {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.home-caret {
+/* The video thumbnail: a Mac desktop scene (documentation/home-video.js)
+   laid out at 1280 x 720 and scaled into the card. js/home-video.js plays
+   it; clicking opens the video. It grows a little on hover. */
+.home-video {
+  --home-video-w: 220px;
   position: relative;
-  visibility: hidden;
-}
-
-.home-caret::after {
-  position: absolute;
-  top: .12em;
-  left: 0;
-  width: 1.5px;
-  height: .94em;
-  border-radius: 1px;
-  background: var(--accent-color);
-  content: "";
-}
-
-.home-example.is-animated .home-caret {
-  visibility: visible;
-}
-
-.home-example.is-animated:not(.is-typing) .home-caret::after {
-  animation: home-caret-blink 1.1s step-end infinite;
-}
-
-.home-example.is-selected [data-home-example] {
-  background: #b4d5fe;
-}
-
-.home-example.is-selected .home-caret {
-  visibility: hidden;
-}
-
-#home-template-heading {
-  margin: 0 0 10px;
-  padding: 0;
-  border: 0;
-  color: #666;
-  font: 400 13px / 1.5 system-ui, sans-serif;
-  letter-spacing: normal;
-}
-
-.home-template-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  max-width: none;
-  gap: var(--home-gutter);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.home-template-grid > li {
-  margin: 0;
-  padding: 0;
-}
-
-.home-template {
   display: block;
+  width: var(--home-video-w);
+  aspect-ratio: 16 / 9;
+  margin: 28px auto 0;
   overflow: hidden;
   border-radius: 5px;
-  background: #f4f3f1;
-  color: #454545;
-  text-decoration: none;
+  background: #a9d3f2;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 14%), 0 1px 3px rgb(0 0 0 / 10%);
+  transition: transform 350ms cubic-bezier(.2, .8, .2, 1), box-shadow 350ms ease;
 }
 
-.home-template:hover {
-  color: #454545;
-  text-decoration: none;
+.home-video:hover {
+  transform: scale(1.08);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 18%), 0 2px 6px rgb(0 0 0 / 10%);
 }
 
-.home-template:focus-visible {
+/* On the documentation page it sits on the left, under the copy */
+.docs-video .home-video {
+  margin: 24px 0 8px;
+}
+
+.home-video:focus-visible {
   outline: 2px solid var(--accent-color);
   outline-offset: 4px;
 }
 
-.home-template-stage {
+.home-video-scene {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1280px;
+  height: 720px;
+  text-align: left;
+  pointer-events: none;
+  transform-origin: 0 0;
+  /* 220 / 1280, the card's width over the scene's. Not calc(var(...) /
+     1280px): an older browser keeps a var() value it can't compute, and the
+     scene is then not scaled at all. */
+  transform: scale(0.171875);
+}
+
+.home-video-scene .pane {
+  margin: 0;
+}
+
+/* Finder on the left with the desktop icons under it, Safari on the right */
+.home-video-finder {
+  position: absolute;
+  top: 56px;
+  left: 56px;
+}
+
+.home-video-desktop {
+  position: absolute;
+  top: 452px;
+  left: 56px;
+  width: 300px;
+}
+
+.home-video-browser {
+  position: absolute;
+  top: 56px;
+  left: 412px;
+}
+
+/* The site in Safari, moved by the script to scroll it (pane's own
+   stylesheet comes after this one, hence the extra class) */
+.home-video .home-video-browser .pane-page {
+  overflow: hidden;
+}
+
+.home-video-site {
+  padding: 40px 64px 72px;
+  color: #1a1a1a;
+  font: 17px / 1.55 Georgia, "Times New Roman", serif;
+}
+
+.home-video-site header {
+  display: flex;
+  gap: 18px;
+  margin-bottom: 48px;
+  font: 15px / 1 -apple-system, system-ui, sans-serif;
+}
+
+.home-video-site header b {
+  margin-right: auto;
+  font-weight: 600;
+}
+
+.home-video-site header span {
+  color: #777;
+}
+
+.home-video-site h4 {
+  margin: 0 0 6px;
+  font-size: 34px;
+  font-weight: 400;
+  line-height: 1.15;
+}
+
+.home-video-site time {
+  display: block;
+  margin-bottom: 22px;
+  color: #888;
+  font: 13px / 1 -apple-system, system-ui, sans-serif;
+}
+
+.home-video-site p {
+  margin: 0 0 20px;
+}
+
+/* Four photos cropped from the album template's screenshot: a five-column
+   grid, each photo about 17% of the image's width */
+.home-video-photos {
   display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  place-items: center;
-  aspect-ratio: 1;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 28px 0;
+}
+
+.home-video-photos i {
+  aspect-ratio: 4 / 3;
+  border-radius: 2px;
+  background: var(--home-video-photos) no-repeat;
+  background-size: 590% auto;
+}
+
+.home-video-photos i:nth-child(1) {
+  background-position: 4.2% 10.9%;
+}
+
+.home-video-photos i:nth-child(2) {
+  background-position: 27.1% 42.2%;
+}
+
+.home-video-photos i:nth-child(3) {
+  background-position: 27.1% 72.9%;
+}
+
+.home-video-photos i:nth-child(4) {
+  background-position: 95.8% 41.5%;
+}
+
+.home-video-site hr {
+  margin: 44px 0;
+  border: 0;
+  border-top: 1px solid #e5e5e5;
+}
+
+.home-video-pointer {
+  position: absolute;
+  top: 640px;
+  left: 300px;
+  z-index: 5;
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 25%));
+}
+
+/* A play button, shown on hover and focus */
+.home-video-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 36px;
+  height: 36px;
+  margin: -18px 0 0 -18px;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 55%);
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.home-video-play::after {
+  position: absolute;
+  top: 11px;
+  left: 14px;
+  border-width: 7px 0 7px 11px;
+  border-style: solid;
+  border-color: transparent transparent transparent #fff;
+  content: "";
+}
+
+.home-video:hover .home-video-play,
+.home-video:focus-visible .home-video-play {
+  opacity: 1;
 }
 
 .home-template-screenshot,
 .home-template-folder {
   grid-area: 1 / 1;
   transition: opacity 300ms ease, transform 300ms ease;
-}
-
-.home-template-screenshot {
-  display: block;
-  width: 70%;
-  height: auto;
-  aspect-ratio: 1200 / 883;
-  border-radius: 5px;
-  box-shadow: 0 5px 15px rgb(90 50 40 / 15%), 0 4px 8px rgb(80 40 30 / 10%);
-  object-fit: cover;
-  object-position: top;
 }
 
 .home-template-folder {
@@ -197,30 +280,6 @@
   }
 }
 
-.home-template-caption {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 20px 20px;
-}
-
-.home-template-caption span + span {
-  color: #656360;
-  text-align: right;
-}
-
-@media (max-width: 1300px) {
-  .home-template-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 991px) {
-  .home-template-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
 @media (max-width: 768px) {
   .content.home-content {
     --home-gutter: 20px;
@@ -245,46 +304,6 @@
     min-height: 140px;
   }
 
-  .home-template-caption {
-    padding-inline: 16px;
-  }
-}
-
-body:has(.home-portfolio) .public-header {
-  animation: home-fade-in 850ms ease 200ms backwards;
-}
-
-.home-portfolio .home-intro {
-  --home-entry-delay: 450ms;
-}
-
-.home-templates {
-  --home-entry-delay: 700ms;
-}
-
-.home-portfolio .home-intro,
-.home-templates {
-  animation: home-fade-in 850ms ease var(--home-entry-delay) backwards;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  @supports (animation-timing-function: linear(0, 1)) {
-    .home-portfolio .home-intro,
-    .home-templates {
-      /* Sample the pattern's critically damped spring, with ω = 2π / (1.2 × .85s).
-         It settles within .05px of the target at 1333ms. */
-      --home-rise-easing: linear(
-        0, .018397, .064406, .127146, .198821, .273955, .348795, .420862,
-        .488609, .551156, .608101, .659368, .705104, .745596, .781216, .812376,
-        .839506, .863028, .883347, .900842, .915861, .928721, .939705, .949067,
-        .957031, .963793, .969525, .974377, .978477, .981938, .984856, .987313,
-        .989379, .991116, .992573, .993796, .994821, .995679, .996397, .996997, 1
-      );
-      animation:
-        home-fade-in 850ms ease var(--home-entry-delay) backwards,
-        home-rise 1333ms var(--home-rise-easing) var(--home-entry-delay) backwards;
-    }
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -293,29 +312,347 @@ body:has(.home-portfolio) .public-header {
     transition: none;
   }
 
-  .home-example .home-caret {
-    display: none;
+  .home-video,
+  .home-video-play {
+    transition: none;
   }
 }
 
-@keyframes home-fade-in {
-  from {
-    opacity: 0;
+/*
+  Tools, Recently done and Questions, from the brochure revision (#3003):
+  rows on a three-column grid under a hairline, the title in column one and
+  the material in columns two and three.
+*/
+
+.home {
+  --home-margin: 0;
+  --home-gap: var(--home-gutter);
+  color: var(--text-color);
+}
+
+.home h2,
+.home p,
+.home ul {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.home h2 {
+  color: var(--text-color);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.45;
+  letter-spacing: normal;
+}
+
+.home ul {
+  list-style: none;
+}
+
+.home li {
+  margin: 0;
+}
+
+.home p a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--dark-border-color);
+  text-underline-offset: 2px;
+}
+
+.home p a:hover {
+  color: var(--text-color);
+  text-decoration-color: currentColor;
+}
+
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: var(--home-gap);
+  margin-inline: var(--home-margin);
+}
+
+.home .home-text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent-color);
+  text-decoration: none;
+}
+
+.home .home-text-link:hover {
+  color: var(--accent-color);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.home .home-text-link:focus-visible,
+.home-faq summary:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 3px;
+}
+
+.home-row {
+  align-items: start;
+  padding: 14px 0 128px;
+  border-top: 1px solid var(--border-color);
+}
+
+.home-row > h2 {
+  grid-column: 1;
+}
+
+.home .home-row-intro {
+  grid-column: 2 / span 2;
+  max-width: 34em;
+  color: var(--medium-text-color);
+}
+
+/* Tools: two columns of names, in columns two and three */
+
+.home .home-tool-list {
+  grid-column: 2 / span 2;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--home-gap);
+  margin-top: 40px;
+}
+
+.home-tool-list a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-color);
+  text-decoration: none;
+}
+
+.home-tool-list a:hover {
+  color: var(--accent-color);
+}
+
+.home-tool-list img {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+.home .home-tool-list .home-text-link {
+  display: flex;
+  border-bottom: 0;
+}
+
+/* People: the avatar grid from the old homepage (.home-avatar in
+   css/blot.css, with its hover card), in columns two and three */
+
+.home .home-people {
+  grid-column: 2 / span 2;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 48px);
+  gap: 16px;
+  margin-top: 40px;
+}
+
+/* Recently done */
+
+.home .home-done {
+  grid-column: 2 / span 2;
+  margin-top: 40px;
+}
+
+.home-done li {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--home-gap);
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.home-done a {
+  grid-column: span 1;
+  color: var(--text-color);
+  text-decoration: none;
+}
+
+.home-done a:hover {
+  color: var(--accent-color);
+}
+
+.home-done .home-check {
+  margin-right: 10px;
+  color: var(--accent-color);
+}
+
+.home-done-when {
+  color: var(--medium-text-color);
+}
+
+/* Questions */
+
+.home .home-faq {
+  grid-column: 2 / span 2;
+  margin-top: 40px;
+  border-top: 1px solid var(--border-color);
+}
+
+.home-faq details {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.home-faq summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 0;
+  list-style: none;
+  cursor: pointer;
+}
+
+.home-faq summary::-webkit-details-marker {
+  display: none;
+}
+
+.home-faq summary::after {
+  color: var(--medium-text-color);
+  content: "+";
+}
+
+.home-faq details[open] summary::after {
+  content: "\2212";
+}
+
+.home-faq summary:hover {
+  color: var(--accent-color);
+}
+
+.home .home-faq p {
+  padding-bottom: 12px;
+  color: var(--medium-text-color);
+}
+
+@media (max-width: 1000px) {
+  .home .home-tool-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@keyframes home-rise {
-  from {
-    transform: translateY(20px);
+@media (max-width: 768px) {
+  .home-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  to {
-    transform: translateY(0);
+  .home-row > *,
+  .home .home-row-intro,
+  .home .home-tool-list,
+  .home .home-people,
+  .home .home-done,
+  .home .home-faq {
+    grid-column: 1 / -1;
+  }
+
+  .home-row {
+    row-gap: 8px;
+    padding-bottom: 88px;
+  }
+
+  .home .home-tool-list,
+  .home .home-people,
+  .home .home-done,
+  .home .home-faq {
+    margin-top: 32px;
+  }
+
+  .home-done li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .home-done a {
+    grid-column: 1;
   }
 }
 
-@keyframes home-caret-blink {
-  50% {
-    opacity: 0;
+/* Templates: two rows of three, the
+   link to all of them on the right */
+
+.home-row-action {
+  grid-column: 3;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.home .home-template-grid {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 48px var(--home-gap);
+  margin-top: 24px;
+}
+
+.home-template-grid > li {
+  margin: 0;
+  padding: 0;
+}
+
+/* A rounded grey card with the name inside it, as on slot a */
+.home-template {
+  display: block;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--surface-muted-color, #f4f3f1);
+  color: var(--text-color);
+  text-decoration: none;
+}
+
+.home-template:hover {
+  color: var(--text-color);
+  text-decoration: none;
+}
+
+.home-template:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 4px;
+}
+
+.home-template-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  aspect-ratio: 4 / 3;
+}
+
+.home-template-screenshot,
+.home-template-folder {
+  grid-area: 1 / 1;
+  transition: opacity 300ms ease, transform 300ms ease;
+}
+
+.home-template-screenshot {
+  display: block;
+  width: 70%;
+  height: auto;
+  aspect-ratio: 1200 / 883;
+  border-radius: 5px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 12%), 0 1px 3px rgb(0 0 0 / 8%);
+  object-fit: cover;
+  object-position: top;
+}
+
+.home-template-caption {
+  padding: 0 20px 20px;
+  color: #9b9b98;
+}
+
+@media (max-width: 1000px) {
+  .home .home-template-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .home .home-template-grid {
+    margin-top: 20px;
   }
 }

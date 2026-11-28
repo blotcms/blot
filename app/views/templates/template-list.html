@@ -1,59 +1,65 @@
-<h1>Templates</h1>
+<!-- /templates, its type pages and search results, laid out like the
+     homepage's Templates row (css/home.css): the title on the left, the
+     dashboard's list controls (css/list-controls.css) on the right, then the
+     homepage's cards. A type page's notes sit in the third column. -->
+<div class="home wide-page">
+  <section class="home-row home-grid" aria-labelledby="templates-heading">
+    <h1 id="templates-heading">Templates</h1>
 
-<div class="templates-toolbar">
-  <ul class="pill-navigation">
-    <li><a href="/templates" class="{{^category}}selected{{/category}}">All</a></li>
-    {{#categories}}
-    <li><a href="/templates/for-{{slug}}" class="{{selected}}">{{name}}</a></li>
-    {{/categories}}
-  </ul>
+    <div class="templates-controls">
+      {{^category}}
+      <nav class="folder-filters" aria-label="Template types">
+        <a class="folder-filters__item is-selected" href="/templates" aria-current="page">All</a>
+        {{#categories}}<a class="folder-filters__item" href="/templates/for-{{slug}}">{{name}}</a>{{/categories}}
+      </nav>
+      {{/category}}
+      {{#category}}
+      <nav class="folder-filters" aria-label="Template types">
+        <a class="folder-filters__item" href="/templates">All</a>
+        {{#categories}}{{#selected}}<a class="folder-filters__item is-selected" href="/templates/for-{{slug}}" aria-current="page">{{name}}</a>{{/selected}}{{^selected}}<a class="folder-filters__item" href="/templates/for-{{slug}}">{{name}}</a>{{/selected}}{{/categories}}
+      </nav>
+      {{/category}}
 
-  <div class="templates-toolbar-right">
-    <div class="template-search">
-      <input
-        type="search"
-        id="template-search-input"
-        placeholder="Search templates"
-        aria-label="Search templates"
-        autocomplete="off"
-        value="{{searchQuery}}"
-      />
+      <div class="site-dashboard-search">
+        <input
+          type="search"
+          id="template-search-input"
+          placeholder="Search"
+          aria-label="Search templates"
+          autocomplete="off"
+          value="{{searchQuery}}"
+        />
+      </div>
     </div>
 
-    <div class="toggle-tabs" id="template-sort" data-default-sort="{{^searchQuery}}popular{{/searchQuery}}">
-      <ul>
-        <li><a href="#" data-sort="latest">Latest</a></li>
-        <li><a href="#" data-sort="popular" class="{{^searchQuery}}selected{{/searchQuery}}">Popular</a></li>
-      </ul>
-    </div>
-  </div>
-</div>
+    <p id="template-search-status" class="template-search-status" role="status">{{#searchQuery}}{{^allTemplates.length}}No templates found for “{{searchQuery}}”{{/allTemplates.length}}{{/searchQuery}}</p>
 
-<p id="template-search-status" class="template-search-status" role="status">{{#searchQuery}}{{^allTemplates.length}}No templates found for “{{searchQuery}}”{{/allTemplates.length}}{{/searchQuery}}</p>
-
-    <div class="{{#sidebar}}templates-with-sidebar{{/sidebar}}">
-    <ul class="clients templates" id="template-grid">
-    {{#allTemplates}}
-    <li class="template-item" data-popularity="{{popularity}}" data-latest="{{latest_commit}}" data-slug="{{slug}}">
-      <a href="/templates/{{slug}}" class="template-link">
-        <img
-          src="{{#cdn}}/images/examples/{{slug}}/0-thumb.png{{/cdn}}"
-          class="template-image"
-          width="80" height="59" alt="" />
-        <span class="template-name">
-          {{name}}
-        </span>
-        {{#updated_label}}
-        <span class="template-updated">Updated {{updated_label}}</span>
-        {{/updated_label}}
-      </a>
-    </li>
-    {{/allTemplates}}
+    {{#sidebar}}<div class="templates-split">{{/sidebar}}
+    <ul class="home-template-grid">
+      {{#allTemplates}}
+      <li>
+        <a class="home-template" href="/templates/{{slug}}">
+          <div class="home-template-stage" aria-hidden="true">
+            <img class="home-template-screenshot"
+              src="{{#cdn}}/images/examples/{{slug}}/0-card.webp{{/cdn}}"
+              srcset="{{#cdn}}/images/examples/{{slug}}/0-thumb.png{{/cdn}} 320w, {{#cdn}}/images/examples/{{slug}}/0-card.webp{{/cdn}} 840w"
+              sizes="(max-width: 768px) calc((100vw - 52px) / 2), calc((100vw - 152px) / 3)"
+              width="1200" height="883" loading="lazy" decoding="async" alt="">
+            <div class="home-template-folder">{{{folder_html}}}</div>
+          </div>
+          <div class="home-template-caption">
+            <span>{{name}}</span>
+          </div>
+        </a>
+      </li>
+      {{/allTemplates}}
     </ul>
 
     {{#sidebar}}
     <aside class="template-category-sidebar">
       {{{sidebar}}}
     </aside>
-    {{/sidebar}}
     </div>
+    {{/sidebar}}
+  </section>
+</div>

@@ -1,0 +1,24 @@
+<!-- A featured site between the Discover feed's posts: the post card's avatar,
+     name and Visit site, with no date, over the homepage's grey template
+     square. documentation/discover.js (feed) builds it; for now the picture
+     is a template's screenshot. -->
+<li class="discover-card discover-feature">
+  <a class="discover-avatar-link" href="{{{site.url}}}" target="_blank" rel="noopener" tabindex="-1" aria-hidden="true">
+    <img class="discover-avatar" src="{{{site.avatar}}}" alt="" loading="lazy" />
+  </a>
+
+  {{#popover}}{{> discover-popover}}{{/popover}}
+
+  <div class="discover-body">
+    <div class="discover-head">
+      <span class="discover-who">
+        <a class="discover-name" href="{{{site.url}}}" target="_blank" rel="noopener">{{site.name}}</a>
+      </span>
+      <a class="discover-visit" href="{{{site.url}}}" target="_blank" rel="noopener">Visit site</a>
+    </div>
+
+    <a class="discover-feature-stage" href="{{{site.url}}}" target="_blank" rel="noopener" tabindex="-1" aria-hidden="true">
+      <img class="discover-feature-shot" src="{{{src}}}" srcset="{{{srcset}}}" sizes="(max-width: 600px) 70vw, 360px" width="1200" height="883" alt="" loading="lazy" decoding="async" />
+    </a>
+  </div>
+</li>

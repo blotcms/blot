@@ -1,5 +1,7 @@
 const Discover = require("models/discover");
 const blogForHost = require("./featured/blogForHost");
+const { loadTemplates } = require("./build/templates");
+const { url: cdnURL } = require("./tools/cdn-url-helper");
 
 // blot.im/discover (#2639): the posts the maintainer has added, newest
 // first, and a sidebar of the featured sites (featured/sites.txt). Runs
@@ -13,6 +15,11 @@ const blogForHost = require("./featured/blogForHost");
 const SIDEBAR_TTL = 10 * 60 * 1000;
 const SIDEBAR_SITES = 10;
 let sidebar = { at: 0, hosts: null };
+
+// Between the posts, every few cards, a featured site: its avatar and name
+// and a picture in the homepage's grey template square. For now the picture
+// is a template's screenshot, not the site itself.
+const FEATURE_EVERY = 3;
 
 const YEAR = 365.25 * 24 * 60 * 60 * 1000;
 
@@ -87,6 +94,43 @@ async function includedHosts(sites) {
   return hosts;
 }
 
+// The feed: the posts, with a featured site after every FEATURE_EVERY of
+// them. sites are the featured sites that have Discover on. Each page starts
+// at a different site and template (seed, from the page's cursor), so the
+// next page of an infinite scroll doesn't repeat the first.
+function feed(posts, sites, templates, seed) {
+  const items = [];
+  let n = 0;
+
+  posts.forEach((post, i) => {
+    items.push({ post });
+    if ((i + 1) % FEATURE_EVERY || !sites.length || !templates.length) return;
+
+    const site = sites[(seed + n) % sites.length];
+    const { slug } = templates[(seed + n) % templates.length];
+    const shot = (name) => cdnURL(`/images/examples/${slug}/${name}`);
+    n++;
+
+    items.push({
+      feature: {
+        site: {
+          name: site.name,
+          url: site.link,
+          avatar: cdnURL(site.image),
+        },
+        popover: popover(
+          { host: site.host, url: site.link, name: site.name },
+          site
+        ),
+        src: shot("0-card.webp"),
+        srcset: `${shot("0-thumb.png")} 320w, ${shot("0-card.webp")} 840w`,
+      },
+    });
+  });
+
+  return items;
+}
+
 async function page(req, res, next) {
   try {
     const { posts, next: more } = await Discover.list({
@@ -99,6 +143,8 @@ async function page(req, res, next) {
     res.locals.title = "Discover";
     res.locals.description = "Posts from sites on Blot";
     res.locals.fullWidth = true;
+    // As wide as the homepage, under its title row (css/blot.css, .wide-page)
+    res.locals.mainClass = "home-content";
     decorate(posts, featured.sites);
 
     const sites = (featured.sites || [])
@@ -112,8 +158,15 @@ async function page(req, res, next) {
         ),
       }));
 
+    const optedIn = (featured.sites || []).filter((site) =>
+      hosts.has(site.host)
+    );
+    const templates = await loadTemplates();
+    const seed = parseInt(String(req.query.before || "").slice(-4), 36) || 0;
+
     res.locals.discover = {
       posts,
+      feed: feed(posts, optedIn, templates, seed),
       next: more ? "/discover?before=" + more : "",
       // The first few; "See all" links to /discover/people for the rest
       sites,
@@ -127,3 +180,4 @@ async function page(req, res, next) {
 
 module.exports = page;
 module.exports.decorate = decorate;
+module.exports.popover = popover;

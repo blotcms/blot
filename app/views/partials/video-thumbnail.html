@@ -1,0 +1,7 @@
+<!-- The video thumbnail: a looping Mac desktop scene that opens the video.
+     documentation/home-video.js draws it (res.locals.homeVideo) for the
+     routes that show it; js/home-video.js plays it. -->
+<a class="home-video" href="/watch" data-watch-trigger aria-label="Watch the video">
+  <div class="home-video-scene" aria-hidden="true" inert>{{{homeVideo}}}</div>
+  <span class="home-video-play" aria-hidden="true"></span>
+</a>

@@ -4,24 +4,25 @@
   container: discover / inline-size;
 }
 
-/* The feed in the middle of the page, the sites in a narrow column against
-   the right edge; the left column is empty, so that the feed is centred */
+/* The feed and the sites box side by side, a fixed gap apart, centred on the
+   page as one block, so their distance never depends on the window */
 .discover {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 560px) minmax(0, 1fr);
-  column-gap: 40px;
+  grid-template-columns: minmax(0, 560px) 240px;
+  column-gap: 64px;
+  justify-content: center;
   align-items: start;
   padding-top: 8px;
 }
 
 .discover-main {
-  grid-column: 2;
+  grid-column: 1;
   min-width: 0;
 }
 
 .discover-sidebar {
-  grid-column: 3;
-  justify-self: end;
+  grid-column: 2;
+  justify-self: start;
   width: 240px;
   /* The box's top in line with the top of the first post's Visit site pill,
      15.5px into the post. Sticky, it keeps that plus the feed's 8px from the
@@ -29,38 +30,6 @@
   margin-top: 15.5px;
   position: sticky;
   top: 23.5px;
-}
-
-/* The page's title and a line about it, in the left column, in the type of
-   the documentation (css/documentation-layout.css) */
-.discover-intro {
-  grid-column: 1;
-  grid-row: 1;
-  justify-self: start;
-  width: 240px;
-  margin-top: 15.5px;
-  position: sticky;
-  top: 23.5px;
-  font-family: Inter, system-ui, sans-serif;
-  font-size: 14px;
-  line-height: 20px;
-  letter-spacing: -.09008px;
-}
-
-.discover-intro h1 {
-  margin: 0;
-  padding: 0;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 20px;
-}
-
-.discover-intro p {
-  margin: 4px 0 0;
-  color: rgb(18 18 18 / 40%);
-  font-size: 13px;
-  font-weight: 460;
-  line-height: 1.2;
 }
 
 /* The featured sites, in a box */
@@ -418,6 +387,39 @@
 }
 
 /* A post without photos: a box with the site and the title */
+/* A featured site between the posts (partials/discover-feature.html): a
+   template's screenshot in the homepage's grey square (css/home.css) */
+.discover-feature-stage {
+  display: grid;
+  place-items: center;
+  margin-top: 8px;
+  aspect-ratio: 4 / 3;
+  border-radius: 5px;
+  background: var(--surface-muted-color, #f4f3f1);
+}
+
+.discover-feature-shot {
+  display: block;
+  width: 70%;
+  height: auto;
+  aspect-ratio: 1200 / 883;
+  border-radius: 5px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 12%), 0 1px 3px rgb(0 0 0 / 8%);
+  object-fit: cover;
+  object-position: top;
+  transition: transform 300ms ease;
+}
+
+.discover-feature-stage:hover .discover-feature-shot {
+  transform: translateY(-4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .discover-feature-shot {
+    transition: none;
+  }
+}
+
 .discover-link-card {
   display: block;
   padding: 14px 16px;
@@ -538,25 +540,12 @@
 }
 
 /* Narrower, the layout follows the width it has (a container query, so the
-   page's own margins count): the feed against the left with the box against
-   the right, then the feed alone, centred, once the feed would be under
-   480px wide beside the box */
-@container discover (max-width: 1119px) {
+   page's own margins count): a smaller gap once the block no longer fits,
+   then the feed alone, centred, once it would be under 480px wide beside
+   the box */
+@container discover (max-width: 863px) {
   .discover {
-    grid-template-columns: minmax(0, 560px) 240px;
-    justify-content: space-between;
-  }
-
-  .discover-main {
-    grid-column: 1;
-  }
-
-  .discover-sidebar {
-    grid-column: 2;
-  }
-
-  .discover-intro {
-    display: none;
+    column-gap: 40px;
   }
 }
 

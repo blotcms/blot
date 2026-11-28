@@ -51,52 +51,9 @@ const initTemplateHero = () => {
   shuffledImages.forEach((image) => grid.appendChild(image));
 };
 
-const initTemplateGrid = () => {
-  const grid = document.getElementById("template-grid");
-
-  if (!grid) return;
-
-  const items = Array.from(grid.querySelectorAll(".template-item"));
-
-  const sortToggle = document.getElementById("template-sort");
-  let activeSort = sortToggle?.dataset.defaultSort;
-
-  const sortBy = (key) => {
-    const sorted = [...items].sort((a, b) => {
-      const aValue = Number(a.dataset[key]) || 0;
-      const bValue = Number(b.dataset[key]) || 0;
-      return bValue - aValue;
-    });
-
-    sorted.forEach((item) => grid.appendChild(item));
-  };
-
-  if (sortToggle) {
-    const sortLinks = Array.from(sortToggle.querySelectorAll("a[data-sort]"));
-
-    const setSort = (sort) => {
-      activeSort = sort;
-      sortLinks.forEach((link) =>
-        link.classList.toggle("selected", link.dataset.sort === activeSort)
-      );
-      grid.dataset.sort = activeSort;
-      sortBy(activeSort === "popular" ? "popularity" : "latest");
-    };
-
-    if (activeSort) {
-      setSort(activeSort);
-    } else {
-      grid.dataset.sort = "relevance";
-    }
-
-    sortLinks.forEach((link) => {
-      link.addEventListener("click", (event) => {
-        event.preventDefault();
-        setSort(link.dataset.sort);
-      });
-    });
-  }
-
+// The lists are ordered on the server: by popularity (build/templates.js),
+// or by relevance for a search.
+const initTemplateSearch = () => {
   // --- Search: title (heavy) + README, ranked server-side ---
   // A search always navigates to /templates/search/:query for real,
   // rather than filtering the current page's grid in place. That grid
@@ -128,4 +85,4 @@ const initTemplateGrid = () => {
 };
 
 initTemplateHero();
-initTemplateGrid();
+initTemplateSearch();

@@ -1,4 +1,6 @@
 const { loadTemplates } = require("./build/templates");
+const { url: cdnURL } = require("./tools/cdn-url-helper");
+const { popover } = require("./discover");
 
 const audiences = new Map([
   ["album", "artists and photographers"],
@@ -28,6 +30,33 @@ const position = new Map(
   [...audiences.keys()].map((slug, index) => [slug, index])
 );
 
+// The editors and apps the homepage's tools section shows, each with a
+// guide under /how/tools and an icon in views/how/tools/icons
+const tools = [
+  ["word", "Word", "word.png"],
+  ["google-docs", "Google Docs", "google-docs.png"],
+  ["obsidian", "Obsidian", "obsidian.png"],
+  ["ia-writer", "iA Writer", "ia-writer.png"],
+  ["ulysses", "Ulysses", "ulysses.png"],
+  ["bear", "Bear", "bear.png"],
+  ["typora", "Typora", "typora.png"],
+  ["sublime-text", "Sublime Text", "sublime-text.ico"],
+  ["emacs", "Emacs", "emacs.png"],
+  ["vim", "Vim", "vim.ico"],
+  ["lightroom", "Lightroom", "lightroom.png"],
+  ["darktable", "darktable", "darktable.ico"],
+].map(([slug, name, icon]) => ({ slug, name, icon }));
+
+// How many templates the homepage shows: two rows of three
+const TEMPLATES = 6;
+
+// How many finished items the homepage shows
+const DONE = 5;
+
+// How many people (featured sites, from ./featured) the homepage shows:
+// two rows of avatars on a wide screen
+const PEOPLE = 28;
+
 module.exports = async function home(req, res) {
   const templates = await loadTemplates();
   const order = (slug) => position.get(slug) ?? position.size;
@@ -43,6 +72,23 @@ module.exports = async function home(req, res) {
     .map((template) => ({
       ...template,
       audience: audiences.get(template.slug),
+    }))
+    .slice(0, TEMPLATES);
+  const featured = res.locals.featured || {};
+  res.locals.homePeople = (featured.sites || [])
+    .slice(0, PEOPLE)
+    .map((site) => ({
+      ...site,
+      image_url: cdnURL(site.image),
+      image_size: featured.image_size,
+      // The hover card the Discover page shows (partials/discover-popover)
+      popover: popover(
+        { name: site.name, host: site.host, url: site.link },
+        site
+      ),
     }));
+  res.locals.homeTools = tools;
+  res.locals.homeDone = (res.locals.recent_commits || []).slice(0, DONE);
+  res.locals.homeHasDone = res.locals.homeDone.length > 0;
   res.render("index");
 };

@@ -1,17 +1,20 @@
 {{#discover}}
-<div class="discover-page">
-<div class="discover">
-  <header class="discover-intro">
+<!-- The title row of the pages as wide as the homepage (css/blot.css,
+     .wide-page). The feed is outside it: .home resets lists and paragraphs. -->
+<div class="home wide-page">
+  <div class="home-row home-grid wide-page-title">
     <h1>Discover</h1>
-    <p>Recent posts from sites on Blot.</p>
-  </header>
+  </div>
+</div>
+<div class="discover-page wide-page-body">
+<div class="discover">
   <div class="discover-main">
     {{^posts.length}}
     <p>Nothing here yet.</p>
     {{/posts.length}}
 
     <ul class="discover-grid" id="discover-grid">
-      {{#posts}}{{> discover-card}}{{/posts}}
+      {{#feed}}{{#post}}{{> discover-card}}{{/post}}{{#feature}}{{> discover-feature}}{{/feature}}{{/feed}}
     </ul>
 
     {{#next}}

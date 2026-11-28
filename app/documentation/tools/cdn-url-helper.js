@@ -50,6 +50,18 @@ const helper = ({ cacheID, viewDirectory }) => {
   };
 };
 
+// The same URL for code that builds markup itself rather than through the
+// {{#cdn}} lambda (which is on the app's locals, so it reaches res.locals only
+// at render). Hashed once per process outside development, like the lambda.
+const urls = {};
+
+helper.url = (path) => {
+  if (config.environment !== "development" && urls[path]) return urls[path];
+  const identifier = versionOf(config.views_directory, path) || MISSING;
+  urls[path] = `${config.cdn.origin}/documentation/v-${identifier}${path}`;
+  return urls[path];
+};
+
 helper.versionOf = versionOf;
 helper.MISSING = MISSING;
 

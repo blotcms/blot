@@ -38,7 +38,11 @@ html:has(.documentation-layout)::-webkit-scrollbar-thumb {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 582px) minmax(0, 1fr);
   align-items: start;
-  padding: 48px 0 40px;
+  /* The hairline of the pages as wide as the homepage (css/blot.css,
+     .wide-page): 48px below the header, inside the homepage's gutters */
+  margin: 48px 30px 0;
+  padding: 14px 0 40px;
+  border-top: 1px solid var(--border-color);
   color: var(--text-color);
   font-family: Inter, system-ui, sans-serif;
   font-size: 14px;
@@ -116,7 +120,8 @@ html:has(.documentation-layout)::-webkit-scrollbar-thumb {
   width: max-content;
   max-width: min(156px, calc(100% - 96px));
   max-height: calc(100dvh - 120px);
-  margin-left: 42px;
+  /* At the gutter, where the hairline above starts */
+  margin-left: 0;
   overflow-y: auto;
   scrollbar-width: thin;
   font-size: 13px;
@@ -130,6 +135,25 @@ html:has(.documentation-layout)::-webkit-scrollbar-thumb {
   padding: 0 0 16px;
   border: 0;
   font: inherit;
+}
+
+/* The section's title, as the wide pages show theirs (css/blot.css,
+   .wide-page h1): 19px, 14px under the hairline */
+.documentation-title {
+  display: block;
+  margin-bottom: 20px;
+  color: var(--text-color);
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 28px;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.documentation-title:hover {
+  color: var(--text-color);
+  text-decoration: none;
 }
 
 .documentation-sidebar nav + nav {
@@ -184,15 +208,30 @@ html:has(.documentation-layout)::-webkit-scrollbar-thumb {
   outline-offset: -1px;
 }
 
+/* Narrower, the sidebar's links go (as before), and its title takes a row
+   of its own above the article */
 @media (max-width: 1080px) {
   .documentation-sidebar {
+    grid-column: 1 / -1;
+    position: static;
+    max-width: none;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .documentation-sidebar nav {
     display: none;
+  }
+
+  .documentation-title {
+    margin-bottom: 32px;
   }
 }
 
 @media (max-width: 768px) {
   .documentation-layout {
-    --documentation-gutter: 24px;
-    padding-top: 24px;
+    /* The text in line with the hairline, at the homepage's phone gutter */
+    --documentation-gutter: 0px;
+    margin-inline: 20px;
   }
 }
