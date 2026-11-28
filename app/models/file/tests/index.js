@@ -557,20 +557,28 @@ describe("models/file", function () {
   });
 
   describe("subtree", function () {
-    it("yields every path below a directory, a page at a time, and nothing beside it", async function () {
+    it("yields every path below a directory, each directory before what is in it, and nothing beside it", async function () {
       await File.set(this.blog.id, "/a/1", file(1));
       await File.set(this.blog.id, "/a/b/2", file(1));
       await File.set(this.blog.id, "/a b", file(1));
       await File.set(this.blog.id, "/a0", file(1));
       await File.set(this.blog.id, "/ab/3", file(1));
 
-      expect(
-        await collect(File.subtree(this.blog.id, "/a", { pageSize: 2 }))
-      ).toEqual(["/a/1", "/a/b", "/a/b/2"]);
+      expect(await collect(File.subtree(this.blog.id, "/a"))).toEqual([
+        "/a/1",
+        "/a/b",
+        "/a/b/2",
+      ]);
       expect((await collect(File.subtree(this.blog.id, "/"))).length).toEqual(
         8
       );
       expect(await collect(File.subtree(this.blog.id, "/nope"))).toEqual([]);
+    });
+
+    it("keeps no set of every path, walking the directories' hashes instead", async function () {
+      await File.set(this.blog.id, "/a/b/c.txt", file(1));
+
+      expect(await client.exists(File.key.paths(this.blog.id))).toEqual(0);
     });
   });
 

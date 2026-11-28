@@ -6,9 +6,9 @@
 //   node scripts/storage/remove-file-index-names.js [--apply] [--blog <blogID>]
 //
 // Run it once every unit runs code which no longer writes them. Without
-// --apply it only counts them. Each blog's keys are named from its path set
-// a page at a time (a file has no names set, and deleting a missing key
-// costs little, as removeAll does), so no key pattern is scanned. It is done
+// --apply it only counts them. Each blog's keys are named from a walk of its
+// directories (a file has no names set, and deleting a missing key costs
+// little), so no key pattern is scanned. It is done
 // when a run without --apply counts none.
 
 const Blog = require("models/blog");
@@ -49,7 +49,7 @@ async function removeNames(blogID, apply) {
   let found = await sweep([File.key.names(blogID, "/")], apply);
   let page = [];
 
-  for await (const path of File.subtree(blogID, "/", { pageSize: PAGE })) {
+  for await (const path of File.subtree(blogID, "/")) {
     page.push(File.key.names(blogID, path));
 
     if (page.length === PAGE) {

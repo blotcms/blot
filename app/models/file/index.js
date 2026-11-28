@@ -54,12 +54,6 @@ function ancestorsOf(path) {
   return result;
 }
 
-// The ZRANGEBYLEX bounds of everything below dir. "0" is the character after
-// "/", so "(/a0" is just past the last path which starts "/a/".
-function below(dir) {
-  return dir === "/" ? ["-", "+"] : ["[" + dir + "/", "(" + dir + "0"];
-}
-
 // Listings are in natural name order, the order of the "all" sorted set
 // (key.sortMember). A directory without one is sorted the same way here,
 // comparing members as bytes as Redis does.
@@ -370,27 +364,32 @@ async function range(blogID, dir, options) {
   return { entries: entries, total: total };
 }
 
-// An async iterator of every path below dir (files and directories), in
-// byte order of the whole path, a page at a time. Yields nothing for a
-// missing directory.
-async function* subtree(blogID, dir, options) {
-  check(blogID);
-  dir = normalize(dir);
+// An async iterator of { path, type } for everything below dir, read from
+// the directories' hashes, one directory at a time: each directory comes
+// before what is in it, and siblings in byte order of their names. Yields
+// nothing for a missing directory, or a file.
+async function* descend(blogID, dir) {
+  var entries = (await scan(blogID, dir)).sort(function (a, b) {
+    return key.compareSorted(a.name, b.name);
+  });
 
-  var count = (options && options.pageSize) || PAGE;
-  var [min, max] = below(dir);
+  for (var entry of entries) {
+    var path = child(dir, entry.name);
 
-  while (true) {
-    var page = await client.zRangeByLex(key.paths(blogID), min, max, {
-      LIMIT: { offset: 0, count: count },
-    });
+    yield { path: path, type: entry.type };
 
-    for (var path of page) yield path;
-
-    if (page.length < count) return;
-
-    min = "(" + page[page.length - 1];
+    if (entry.type === "dir") yield* descend(blogID, path);
   }
+}
+
+// An async iterator of every path below dir (files and directories), each
+// directory before what is in it and siblings in byte order. It costs a read
+// per directory, so it is for moves, removals, rebuilds and scripts. Yields
+// nothing for a missing directory.
+async function* subtree(blogID, dir) {
+  check(blogID);
+
+  for await (var found of descend(blogID, normalize(dir))) yield found.path;
 }
 
 // The path which path names ignoring case, spelled as stored, or null. If
@@ -580,7 +579,6 @@ async function setMany(blogID, items) {
     var previous = existing.get(path);
 
     multi.hSet(key.dir(blogID, parentOf(path)), nameOf(path), pack(record));
-    multi.zAdd(key.paths(blogID), { score: 0, value: path });
 
     if (record.type === "file") {
       bytes += (Number(record.size) || 0) - (previous ? previous.size : 0);
@@ -690,40 +688,30 @@ async function* flagged(blogID, dir) {
   }
 }
 
-// Forgets everything below a directory, deepest first, a page at a time, so
+// Forgets everything below a directory, deepest first: each subdirectory is
+// emptied before its parent's children are removed, a page at a time, so
 // each file's size is still in its parent's hash when it is counted. If this
 // stops part way, what is left is still a consistent subtree, except that a
 // parent's lowercased lookup may name a child already gone, until the parent
 // itself goes; the reconcile repairs that.
 async function removeBelow(blogID, dir) {
-  var [min, max] = below(dir);
+  var entries = await scan(blogID, dir);
 
-  while (true) {
-    var page = await client.zRange(key.paths(blogID), max, min, {
-      BY: "LEX",
-      REV: true,
-      LIMIT: { offset: 0, count: PAGE },
-    });
+  for (var entry of entries)
+    if (entry.type === "dir") await removeBelow(blogID, child(dir, entry.name));
 
-    if (!page.length) return;
-
-    var records = await Promise.all(
-      page.map(function (path) {
-        return client.hGet(key.dir(blogID, parentOf(path)), nameOf(path));
-      })
-    );
-
+  for (var i = 0; i < entries.length; i += PAGE) {
     var multi = client.multi();
     var bytes = 0;
     var files = 0;
 
-    page.forEach(function (path, i) {
-      var record = parse(records[i]);
-
-      if (record && record.type === "file") {
-        bytes += record.size;
+    for (var found of entries.slice(i, i + PAGE)) {
+      if (found.type === "file") {
+        bytes += found.size;
         files += 1;
       } else {
+        var path = child(dir, found.name);
+
         multi.del([
           key.dir(blogID, path),
           key.lower(blogID, path),
@@ -732,11 +720,9 @@ async function removeBelow(blogID, dir) {
         ]);
       }
 
-      multi.hDel(key.dir(blogID, parentOf(path)), nameOf(path));
-      removeSorted(multi, blogID, parentOf(path), nameOf(path));
-    });
-
-    multi.zRem(key.paths(blogID), page);
+      multi.hDel(key.dir(blogID, dir), found.name);
+      removeSorted(multi, blogID, dir, found.name);
+    }
 
     if (bytes) multi.hIncrBy(key.totals(blogID), "bytes", -bytes);
     if (files) multi.hIncrBy(key.totals(blogID), "files", -files);
@@ -769,7 +755,6 @@ async function remove(blogID, path) {
 
   multi.hDel(key.dir(blogID, parent), name);
   removeSorted(multi, blogID, parent, name);
-  multi.zRem(key.paths(blogID), path);
   setNames(multi, lowerKey, folded, updateNames(joined, name, false));
 
   if (record.type === "dir") {
@@ -789,21 +774,21 @@ async function remove(blogID, path) {
   return record;
 }
 
-// Forgets the whole folder, for blog deletion and before a rebuild
+// Forgets the whole folder, for blog deletion and before a rebuild. Every
+// directory is found first, then their keys deleted a page at a time (a
+// directory's hash must still be there when the walk reaches it).
 async function removeAll(blogID) {
   check(blogID);
 
-  while (true) {
-    var page = await client.zRange(key.paths(blogID), 0, PAGE - 1);
+  var dirs = ["/"];
 
-    if (!page.length) break;
+  for await (var found of descend(blogID, "/"))
+    if (found.type === "dir") dirs.push(found.path);
 
-    var multi = client.multi();
+  for (var i = 0; i < dirs.length; i += PAGE) {
     var keys = [];
 
-    // A file has no keys of its own, and deleting a missing key costs little
-    // next to looking up which paths are directories
-    for (var path of page)
+    for (var path of dirs.slice(i, i + PAGE))
       keys.push(
         key.dir(blogID, path),
         key.lower(blogID, path),
@@ -811,20 +796,10 @@ async function removeAll(blogID) {
         ...sortKeys(blogID, path)
       );
 
-    multi.del(keys);
-    multi.zRem(key.paths(blogID), page);
-
-    await multi.exec();
+    await client.del(keys);
   }
 
-  await client.del([
-    key.dir(blogID, "/"),
-    key.lower(blogID, "/"),
-    key.names(blogID, "/"),
-    ...sortKeys(blogID, "/"),
-    key.paths(blogID),
-    key.totals(blogID),
-  ]);
+  await client.del([key.paths(blogID), key.totals(blogID)]);
 }
 
 // Checks a directory's sorted set for one order against its hash, a page
@@ -1055,7 +1030,9 @@ async function rebuild(blogID, records) {
 
   counts.files = sum.files;
   counts.bytes = sum.bytes;
-  counts.dirs = (await client.zCard(key.paths(blogID))) - sum.files;
+
+  for await (var found of descend(blogID, "/"))
+    if (found.type === "dir") counts.dirs += 1;
 
   return counts;
 }

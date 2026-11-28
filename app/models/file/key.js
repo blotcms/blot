@@ -44,8 +44,11 @@ module.exports = {
     return prefix(blogID) + ":sort:build:" + order + ":" + dirPath;
   },
 
-  // Sorted set of every path below the root, all at score 0, for subtree
-  // queries with ZRANGEBYLEX (the entries:lex pattern)
+  // The sorted set of every path below the root, which subtree queries read
+  // before they walked the directories' hashes instead. Nothing reads it
+  // now. Code from before this one still adds to it during a deploy, so
+  // removeAll still deletes it, until scripts/storage/remove-file-index-paths.js
+  // has removed the rest.
   paths: function (blogID) {
     return prefix(blogID) + ":paths";
   },
