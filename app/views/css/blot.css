@@ -49,7 +49,8 @@ h1.import-method-title img {
   display: flex;
   gap: 2rem;
   justify-content: center;
-  margin: 0 0 2.5rem;
+  /* Clear of the paragraph above, as the documentation's other figures are */
+  margin: 24px 0 2.5rem;
   max-width: 600px;
   min-height: 250px;
   padding: 2rem;
@@ -1467,5 +1468,19 @@ body.watch-page .main-section {
   .template-showcase {
     padding-right: 1rem;
     padding-left: 1rem;
+  }
+}
+
+/* The other public pages (about, questions and the rest) on the wide
+   pages' gutters, under the header's edges: 30px, 20px on phones. Only the
+   public bundle loads this file, so the dashboard keeps its own. */
+.content:not(.home-content) {
+  padding-left: 30px;
+  padding-right: 30px;
+}
+
+@media (max-width: 768px) {
+  .content:not(.home-content) {
+    padding: 16px 20px 0;
   }
 }
