@@ -1016,48 +1016,40 @@ body.watch-page .main-section {
   font-size: var(--medium-font-size);
 }
 
-/* The pricing page (pricing.html), a wide page: the plan in the first
-   column, in the homepage's grey card, the questions and the note beside
-   it in columns two and three, in the homepage rows' 15px */
+/* The pricing page (pricing.html), a wide page. The plan is one grey band
+   across all three columns, its parts on the page's own column lines: the
+   price large in column one, what it includes in column two, Create site at
+   the foot of column three. Under it, the questions in columns two and
+   three, as on the homepage, and the note about funding in column one
+   beside them. */
 .home.pricing-page {
+  --pricing-pad: 32px;
   font-size: 15px;
   line-height: 1.5;
 }
 
 .pricing-page .pricing-panel {
-  grid-column: 1;
-  grid-row: 2 / span 2;
+  grid-column: 1 / -1;
+  display: grid;
+  /* Columns one and three lose the padding; column two is exactly the
+     page's column, so its left edge is the questions' left edge */
+  grid-template-columns:
+    minmax(0, 1fr)
+    calc((100% + 2 * var(--pricing-pad) - 2 * var(--home-gap)) / 3)
+    minmax(0, 1fr);
+  column-gap: var(--home-gap);
+  align-items: start;
   box-sizing: border-box;
   margin-top: 24px;
-  padding: 32px;
+  padding: 40px var(--pricing-pad);
   border-radius: 5px;
   background: var(--surface-muted-color, #f4f3f1);
 }
 
-.home.pricing-page .home-faq {
-  grid-row: 2;
-  margin-top: 24px;
-}
-
-.home .pricing-note {
-  grid-column: 2 / span 2;
-  grid-row: 3;
-  max-width: 34em;
-  margin-top: 40px;
-  color: var(--medium-text-color);
-}
-
 .pricing-price {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  column-gap: 4px;
-  row-gap: 0;
+  grid-column: 1;
+  display: block;
   color: var(--text-color);
-  font-size: 19px;
-  font-weight: 400;
-  line-height: 28px;
-  margin-bottom: 32px;
   text-decoration: none;
 }
 
@@ -1065,7 +1057,114 @@ body.watch-page .main-section {
   color: var(--text-color);
 }
 
+.pricing-price__amount {
+  display: block;
+  font-size: 72px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.pricing-price__period {
+  display: block;
+  margin-top: 12px;
+  color: var(--medium-text-color);
+}
+
+.pricing-includes {
+  grid-column: 2;
+}
+
 .pricing-panel .feature-list {
+  margin: 0;
+}
+
+.pricing-panel .feature-list li {
+  margin: 0;
+  padding: 10px 0;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.pricing-panel .feature-list li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.pricing-panel .feature-list .icon-small-check {
+  width: 12px;
+  height: 12px;
+  mask-size: 12px;
+  vertical-align: middle;
+  top: 0;
+  color: #b8bdc8;
+}
+
+.pricing-panel .brochure-create-button {
+  grid-column: 3;
+  align-self: end;
+}
+
+.home.pricing-page .home-faq {
+  grid-column: 2 / span 2;
+  grid-row: 3;
+  margin-top: 64px;
+}
+
+.home .pricing-note {
+  grid-column: 1;
+  grid-row: 3;
+  max-width: 24em;
+  margin-top: 64px;
+  padding-top: 18px;
+  color: var(--medium-text-color);
+}
+
+/* Narrower, the band's parts stack: the price, the list, the button */
+@media (max-width: 768px) {
+  .home.pricing-page {
+    --pricing-pad: 24px;
+  }
+
+  .pricing-page .pricing-panel {
+    grid-template-columns: minmax(0, 1fr);
+    padding-block: 32px;
+  }
+
+  .pricing-price,
+  .pricing-includes,
+  .pricing-panel .brochure-create-button {
+    grid-column: 1;
+  }
+
+  .pricing-includes {
+    margin-top: 32px;
+  }
+
+  .pricing-panel .brochure-create-button {
+    margin-top: 32px;
+  }
+
+  .pricing-price__amount {
+    font-size: 56px;
+  }
+
+  .home.pricing-page .home-faq,
+  .home .pricing-note {
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
+
+  .home.pricing-page .home-faq {
+    margin-top: 40px;
+  }
+
+  .home .pricing-note {
+    margin-top: 32px;
+    padding-top: 0;
+  }
+}
+
+.feature-list {
   margin: 0 0 32px;
 }
 
