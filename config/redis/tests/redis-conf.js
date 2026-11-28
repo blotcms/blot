@@ -31,6 +31,7 @@ describe("redis.conf", function () {
 
   it("errors on writes at maxmemory instead of evicting", function () {
     expect(only("maxmemory-policy")).toBe("noeviction");
+    expect(only("list-compress-depth")).toBe("1");
     // maxmemory itself is derived from RAM by host/setup.sh
     expect(config.maxmemory).toBeUndefined();
     expect(config.include).toEqual(["/etc/redis6/blot-memory.conf"]);
