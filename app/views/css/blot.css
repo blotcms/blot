@@ -72,12 +72,11 @@ h1.import-method-title img {
   top: 0;
 }
 
+/* Blot's folder (an inline SVG, 88 x 73.4), the client logo's width */
 .sync-illustration-logo {
-  height: auto;
-  max-height: 32px;
-  max-width: 32px;
-  object-fit: contain;
-  width: 32px;
+  display: block;
+  width: 36px;
+  height: 30px;
 }
 
 @media (max-width: 480px) {
