@@ -10,10 +10,16 @@
 // so an entry saved by a build in between is left alone (that build already
 // stored it compact). The TTL of a deleted entry is kept.
 //
-// --expand does the reverse, for a rollback to a release from before the
-// compact form, which reads only entries with every field written out: run
-// it before the rollback, and again after it for the entries saved in
-// between.
+// --expand does the reverse, for a rollback past the release that taught
+// Entry.get to read the compact form (#3023): releases before it read `body`
+// and the teasers as stored. The script runs from the deployed release, and
+// every unit keeps writing compact entries while the writer (#3024) is
+// deployed, so roll back in this order:
+//
+//   1. Deploy a revert of the writer: nothing writes compact entries any
+//      more, and every unit still reads them.
+//   2. Run this script with --expand --apply.
+//   3. Only then roll back past the reader.
 //
 // Dry run by default: reports how many entries would be rewritten and the
 // bytes they take now and would take after. Pass --apply to write.
@@ -39,22 +45,7 @@ const READ_BATCH = 20;
 // blog:<id>:entry:<path>, not blog:<id>:tags:entry:<path> (sets)
 const ENTRY_KEY = /^blog:[^:]+:entry:/;
 
-const args = process.argv.slice(2);
-const apply = args.includes("--apply");
-const expand = args.includes("--expand");
-const identifier = args.find((arg) => !arg.startsWith("--"));
-
-const totals = {
-  entries: 0,
-  rewritten: 0,
-  written: 0,
-  changed: 0,
-  unreadable: 0,
-  bytesBefore: 0,
-  bytesAfter: 0,
-};
-
-async function pattern() {
+async function pattern(identifier) {
   if (!identifier) return "blog:*:entry:*";
 
   const { blog } = await getBlog(identifier);
@@ -64,72 +55,83 @@ async function pattern() {
   return "blog:" + blog.id + ":entry:*";
 }
 
-// The value to store instead, or null if the stored one is already right
-function replacementFor(key, value) {
-  let entry;
+// Resolves to the totals of a run over every entry, or one blog's
+async function run({ apply = false, expand = false, identifier } = {}) {
+  const totals = {
+    entries: 0,
+    rewritten: 0,
+    written: 0,
+    changed: 0,
+    unreadable: 0,
+    bytesBefore: 0,
+    bytesAfter: 0,
+  };
 
-  try {
-    entry = codec.decode(value);
-  } catch (err) {
-    totals.unreadable++;
-    console.error("Unreadable entry, left as it is:", key);
-    return null;
+  // The value to store instead, or null if the stored one is already right
+  function replacementFor(key, value) {
+    let entry;
+
+    try {
+      entry = codec.decode(value);
+    } catch (err) {
+      totals.unreadable++;
+      console.error("Unreadable entry, left as it is:", key);
+      return null;
+    }
+
+    const replacement = expand ? JSON.stringify(entry) : codec.encode(entry);
+
+    if (replacement === value) return null;
+
+    if (JSON.stringify(codec.decode(replacement)) !== JSON.stringify(entry)) {
+      throw new Error("Rewritten entry does not read back the same: " + key);
+    }
+
+    return replacement;
   }
 
-  const replacement = expand ? JSON.stringify(entry) : codec.encode(entry);
+  async function rewriteBatch(keys) {
+    const values = await client.mGet(keys);
 
-  if (replacement === value) return null;
+    for (let i = 0; i < keys.length; i++) {
+      const value = values[i];
 
-  if (JSON.stringify(codec.decode(replacement)) !== JSON.stringify(entry)) {
-    throw new Error("Rewritten entry does not read back the same: " + key);
+      // Deleted (expired) since the scan
+      if (!value) continue;
+
+      const replacement = replacementFor(keys[i], value);
+
+      if (replacement === null) continue;
+
+      totals.rewritten++;
+      totals.bytesBefore += Buffer.byteLength(value);
+      totals.bytesAfter += Buffer.byteLength(replacement);
+
+      if (!apply) continue;
+
+      const written = await client.eval(SET_IF_UNCHANGED, {
+        keys: [keys[i]],
+        arguments: [value, replacement],
+      });
+
+      if (written) totals.written++;
+      else totals.changed++;
+    }
   }
 
-  return replacement;
-}
-
-async function rewriteBatch(keys) {
-  const values = await client.mGet(keys);
-
-  for (let i = 0; i < keys.length; i++) {
-    const value = values[i];
-
-    // Deleted (expired) since the scan
-    if (!value) continue;
-
-    const replacement = replacementFor(keys[i], value);
-
-    if (replacement === null) continue;
-
-    totals.rewritten++;
-    totals.bytesBefore += Buffer.byteLength(value);
-    totals.bytesAfter += Buffer.byteLength(replacement);
-
-    if (!apply) continue;
-
-    const written = await client.eval(SET_IF_UNCHANGED, {
-      keys: [keys[i]],
-      arguments: [value, replacement],
-    });
-
-    if (written) totals.written++;
-    else totals.changed++;
+  function report() {
+    const mb = (bytes) => (bytes / 1024 / 1024).toFixed(1) + "MB";
+    console.log(
+      `Entries: ${totals.entries}.`,
+      `To rewrite: ${totals.rewritten} (${mb(totals.bytesBefore)} now, ${mb(
+        totals.bytesAfter
+      )} after).`,
+      apply ? `Written: ${totals.written}.` : "",
+      totals.changed ? `Changed underneath: ${totals.changed}.` : "",
+      totals.unreadable ? `Unreadable: ${totals.unreadable}.` : ""
+    );
   }
-}
 
-function report() {
-  const mb = (bytes) => (bytes / 1024 / 1024).toFixed(1) + "MB";
-  console.log(
-    `Entries: ${totals.entries}.`,
-    `To rewrite: ${totals.rewritten} (${mb(totals.bytesBefore)} now, ${mb(
-      totals.bytesAfter
-    )} after).`,
-    apply ? `Written: ${totals.written}.` : "",
-    totals.changed ? `Changed underneath: ${totals.changed}.` : "",
-    totals.unreadable ? `Unreadable: ${totals.unreadable}.` : ""
-  );
-}
-
-async function main() {
   console.log(
     (expand ? "Expanding entries" : "Compacting entries") +
       (apply ? "" : ": dry run (pass --apply to write)")
@@ -138,7 +140,7 @@ async function main() {
   let scanned = 0;
 
   for await (const keys of client.scanIterator({
-    MATCH: await pattern(),
+    MATCH: await pattern(identifier),
     COUNT: SCAN_COUNT,
     TYPE: "string",
   })) {
@@ -157,11 +159,24 @@ async function main() {
   }
 
   report();
+
+  return totals;
 }
 
-main()
-  .then(() => process.exit(totals.unreadable ? 1 : 0))
-  .catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
+module.exports = run;
+
+if (require.main === module) {
+  const args = process.argv.slice(2);
+
+  run({
+    apply: args.includes("--apply"),
+    expand: args.includes("--expand"),
+    identifier: args.find((arg) => !arg.startsWith("--")),
+  }).then(
+    (totals) => process.exit(totals.unreadable ? 1 : 0),
+    (err) => {
+      console.error(err);
+      process.exit(1);
+    }
+  );
+}

@@ -111,6 +111,8 @@ describe("entry codec", function () {
     expect(kept.every((value) => value === teaser)).toBe(true);
     // A slice would keep every html (~30MB); the teasers are ~1KB in all
     expect(retainedMB).toBeLessThan(htmlMB / 4);
+  });
+
   it("stores entries compact and reads them back whole", async function () {
     var entry = await this.set(
       "/a.txt",
@@ -122,6 +124,46 @@ describe("entry codec", function () {
     expect(typeof entry.body).toEqual("string");
     expect(entry.body.length).toBeGreaterThan(0);
     expect(entry.html.endsWith(entry.body)).toBe(true);
+  });
+
+  it("keeps body when a save changes html but not body", async function () {
+    var set = require("../set");
+    var entry = await this.set(
+      "/a.txt",
+      "# Hello\n\n" + "Some words. ".repeat(200)
+    );
+    var html = "<p>" + "Rewritten without the old body. ".repeat(20) + "</p>";
+
+    await set(this.blog.id, "/a.txt", { html: html });
+
+    var raw = JSON.parse(await redis.get(key.entry(this.blog.id, "/a.txt")));
+    var saved = await this.get("/a.txt");
+
+    // No longer the end of html, so it is written out
+    expect(typeof raw.body).toEqual("string");
+    expect(saved.html).toEqual(html);
+    expect(saved.body).toEqual(entry.body);
+  });
+
+  it("reads a deleted entry stored compact, while it has a TTL", async function () {
+    var set = require("../set");
+    var entry = await this.set(
+      "/a.txt",
+      "# Hello\n\n" + "Some words. ".repeat(200)
+    );
+
+    await set(this.blog.id, "/a.txt", { deleted: true });
+
+    var raw = JSON.parse(await redis.get(key.entry(this.blog.id, "/a.txt")));
+    var deleted = await this.get("/a.txt");
+
+    expect(typeof raw.body).toEqual("number");
+    expect(await redis.ttl(key.entry(this.blog.id, "/a.txt"))).toBeGreaterThan(
+      0
+    );
+    expect(deleted.deleted).toBe(true);
+    expect(deleted.body).toEqual(entry.body);
+    expect(deleted.teaser).toEqual(entry.teaser);
   });
 
   it("reads entries stored with every field written out, beside compact ones", async function () {
