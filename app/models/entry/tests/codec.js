@@ -62,6 +62,57 @@ describe("entry codec", function () {
     expect(codec.decode(codec.encode(entry))).toEqual(entry);
   });
 
+  it("restores fields cut through a surrogate pair exactly", function () {
+    // body starts with the second half of 🙂: slices count UTF-16 code units
+    var html = "<h1>" + "x".repeat(20) + "🙂" + "y".repeat(40) + "</h1>";
+    var cut = html.indexOf("🙂") + 1;
+    var entry = {
+      id: "/a.txt",
+      html: html,
+      body: html.slice(cut),
+      teaser: html.slice(0, cut),
+      teaserBody: html.slice(cut - 20, cut),
+    };
+
+    var compact = JSON.parse(codec.encode(entry));
+
+    expect(compact.body).toEqual(cut);
+    expect(compact.teaser).toEqual(cut);
+    expect(codec.decode(codec.encode(entry))).toEqual(entry);
+    expect(codec.decode(codec.encode(entry)).body.charCodeAt(0)).toEqual(
+      entry.body.charCodeAt(0)
+    );
+  });
+
+  it("restores fields which don't keep the entry's html alive", function () {
+    // A list that keeps only teasers (projectEntryFields drops html) must
+    // not hold every entry's html too, which a V8 slice of html would
+    var v8 = require("v8");
+    v8.setFlagsFromString("--expose-gc");
+    var gc = require("vm").runInNewContext("gc");
+
+    var teaser = "<p>" + "A teaser. ".repeat(10) + "</p>";
+    var kept = [];
+    var htmlMB = 0;
+
+    gc();
+    var before = process.memoryUsage().heapUsed;
+
+    for (var i = 0; i < 10; i++) {
+      var html = teaser + ("<p>Long " + i + " </p>").repeat(200000);
+      htmlMB += html.length / 1024 / 1024;
+      var json = codec.encode({ id: "/" + i, html: html, teaser: teaser });
+      kept.push(codec.decode(json).teaser);
+    }
+
+    gc();
+    var retainedMB = (process.memoryUsage().heapUsed - before) / 1024 / 1024;
+
+    expect(kept.every((value) => value === teaser)).toBe(true);
+    // A slice would keep every html (~30MB); the teasers are ~1KB in all
+    expect(retainedMB).toBeLessThan(htmlMB / 4);
+  });
+
   it("reads entries stored with every field written out, beside compact ones", async function () {
     var compact = await this.set("/a.txt", "Compact " + "words ".repeat(20));
     var whole = await this.set("/b.txt", "Whole " + "words ".repeat(20));

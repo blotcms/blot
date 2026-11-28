@@ -12,9 +12,14 @@
 //
 // A number can't be confused with a stored field, which is always a string,
 // so entries stored before this, with every field written out, read the same.
-// Restoring a field is a slice of a string already parsed, which V8 makes
-// without copying, so reading an entry costs less than before: there is less
-// JSON to parse.
+//
+// Each restored field is a copy, not a slice: a V8 slice keeps the whole
+// string it was cut from alive, so a list or cache that keeps an entry's
+// teaser and drops its html (blog/render/retrieve/projectEntryFields) would
+// keep the html too (#2795). Copying costs less than parsing the same text
+// from JSON did, so reading an entry still costs less than before: on a
+// catalog shaped like the largest blogs', 3 ms less to decode its ~1,300
+// entries at the median (#3014).
 
 // Fields shorter than this are left as they are: a number would save little
 const MIN_LENGTH = 16;
@@ -52,14 +57,22 @@ function decode(json) {
   const entry = JSON.parse(json);
   const { html } = entry;
 
-  if (typeof entry.teaser === "number")
-    entry.teaser = html.slice(0, entry.teaser);
-  if (typeof entry.body === "number") entry.body = html.slice(entry.body);
+  if (typeof entry.teaser === "number") {
+    entry.teaser = copy(html.slice(0, entry.teaser));
+  }
+  if (typeof entry.body === "number") entry.body = copy(html.slice(entry.body));
   if (typeof entry.teaserBody === "number") {
-    entry.teaserBody = entry.teaser.slice(entry.teaserBody);
+    entry.teaserBody = copy(entry.teaser.slice(entry.teaserBody));
   }
 
   return entry;
+}
+
+// A string with its own characters, holding nothing else alive. V8 copies
+// the characters when it slices a concatenation, so the slice it returns
+// refers to that copy rather than to the string the field was cut from.
+function copy(string) {
+  return (" " + string).slice(1);
 }
 
 module.exports = { encode, decode };
