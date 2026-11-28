@@ -388,6 +388,36 @@ looking at the hosts, so after a failure fix the cause and run it again. Check
   time for the jobs above, not for traffic. To measure it again, count requests per
   hour in `/var/instance-ssd/logs/access.log*`.
 
+### ssh aliases and host keys, step by step
+
+`cycle.sh` takes ssh names but never edits `~/.ssh/config` or `known_hosts`.
+Here `blot` is the production alias (an alias of the Elastic IP), `<new>` and
+`<old-direct>` are names you choose (for example `blot-new` and
+`blot-old-direct`), and `<port>` is `BLOT_SSH_PORT`. Do these by hand:
+
+1. **After `launch`**, check the new host's key against the one cloud-init
+   printed before trusting it: `ssh-keyscan -p <port> -t ed25519 <launch address>`
+   and the `ED25519` line of `aws ec2 get-console-output --instance-id <new id> --latest`.
+   The two `SHA256:` fingerprints must match (`ssh-keygen -lf` prints the keyscan's).
+2. Add the keyscan line to `~/.ssh/known_hosts` (after `ssh-keygen -R
+   '[<launch address>]:<port>'`), and a `Host <new>` block with the launch
+   address, `User ec2-user`, the port and the key.
+3. Add a `Host <old-direct>` block: the old host's private IP, the same user,
+   port and key, and `ProxyJump <new>`. Its key is the old host's, already in
+   `known_hosts` under the Elastic IP: copy that line to
+   `[<old private IP>]:<port>` (`ssh-keygen -F '[<Elastic IP>]:<port>'`).
+4. Check both with `ssh -n -o StrictHostKeyChecking=yes <new> 'uname -r'` and
+   the same for `<old-direct>` before `replicate`. `uname -r` on `<new>` is
+   also the moment to confirm the new host boots the kernel the cycle is for.
+5. **After `switch`**, change `HostName` for `<new>` to the Elastic IP, and
+   replace the Elastic IP's line in `known_hosts` with the new host's key
+   (`ssh-keygen -R '[<Elastic IP>]:<port>'`, then the keyscan line with the
+   address swapped). `ssh blot` now reaches the new host; check it with
+   `ssh -n blot hostname`, which prints the new host's private name.
+6. Pass `<old-direct> <new>` to `finish`, since `blot` is the new host by
+   then. **After `finish`**, delete both blocks and their `known_hosts` lines
+   (`ssh-keygen -R` for the private IP and the launch address).
+
 **Rollback** before the promotion: lift the freeze, `read-only.js off` in
 `blot-blue` on the old host (`switch` does this itself when the lock wait
 fails). After it, the old Redis replicates from the new one and both hosts
