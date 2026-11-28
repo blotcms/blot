@@ -2,7 +2,7 @@
 
 This module is the authoritative data layer for blog entries in Blot. It handles persistence, URL assignment, list membership, backlink tracking, dependency graph maintenance, scheduled publication, and full-text search for individual entries within a blog.
 
-All storage is backed by Redis. Entry data is serialised as JSON strings. Entries may store `body`, `teaser` and `teaserBody` as a position in `html` or `teaser` when they repeat it (`codec.js`), or have every field written out; readers accept both. Relationships (URL-to-path mappings, sorted membership lists, dependency sets) are maintained as separate Redis keys updated atomically alongside each write.
+All storage is backed by Redis. Entry data is serialised as JSON strings, with `body`, `teaser` and `teaserBody` stored as a position in `html` or `teaser` when they repeat it (`codec.js`). Entries stored before that have every field written out until they are saved again or `scripts/entry/compact-entries.js` rewrites them, and readers accept both. Relationships (URL-to-path mappings, sorted membership lists, dependency sets) are maintained as separate Redis keys updated atomically alongside each write.
 
 ---
 

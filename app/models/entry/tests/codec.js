@@ -111,6 +111,17 @@ describe("entry codec", function () {
     expect(kept.every((value) => value === teaser)).toBe(true);
     // A slice would keep every html (~30MB); the teasers are ~1KB in all
     expect(retainedMB).toBeLessThan(htmlMB / 4);
+  it("stores entries compact and reads them back whole", async function () {
+    var entry = await this.set(
+      "/a.txt",
+      "# Hello\n\n" + "Some words. ".repeat(200)
+    );
+    var raw = JSON.parse(await redis.get(key.entry(this.blog.id, "/a.txt")));
+
+    expect(typeof raw.body).toEqual("number");
+    expect(typeof entry.body).toEqual("string");
+    expect(entry.body.length).toBeGreaterThan(0);
+    expect(entry.html.endsWith(entry.body)).toBe(true);
   });
 
   it("reads entries stored with every field written out, beside compact ones", async function () {

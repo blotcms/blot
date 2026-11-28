@@ -5,6 +5,7 @@ var guid = require("helper/guid");
 var clfdate = require("helper/clfdate");
 var debug = require("debug")("blot:entry:set");
 var get = require("./get");
+var codec = require("./codec");
 var key = require("./key");
 var setUrl = require("./_setUrl");
 var Candidates = setUrl.Candidates;
@@ -202,6 +203,7 @@ async function save(blogID, path, updates) {
   ensure(entry, model, true);
 
   var json = JSON.stringify(entry);
+  var value = codec.encode(entry);
 
   // Store the entry
   if (entry.deleted) {
@@ -215,7 +217,7 @@ async function save(blogID, path, updates) {
 
     var multi = redis
       .multi()
-      .set(entryKey, json)
+      .set(entryKey, value)
       .expire(entryKey, DELETED_ENTRY_TTL_SECONDS);
 
     if (ownsPermalink) multi.expire(permalinkKey, DELETED_ENTRY_TTL_SECONDS);
@@ -227,7 +229,7 @@ async function save(blogID, path, updates) {
   } else {
     // setUrl's SET of the permalink key cleared any TTL it had, so a file
     // re-added within the day has a permanent permalink again
-    await redis.set(entryKey, json);
+    await redis.set(entryKey, value);
     await redis.persist(entryKey);
   }
 
