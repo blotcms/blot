@@ -13,13 +13,23 @@ describe("scripts/template/compress-views", function () {
     spyOn(console, "log");
   });
 
+  // A view stored as written, as every view was before setView compressed
+  // them (and as a short one still is)
+  async function writePlain(templateID, name, content) {
+    await client
+      .multi()
+      .hSet(key.view(templateID, name), { name, content })
+      .sAdd(key.allViews(templateID), name)
+      .exec();
+  }
+
   function hasField(name, field) {
     return client.hExists(key.view(this.template.id, name), field);
   }
 
   it("compresses a long view and leaves a short one as written", async function () {
-    await setView(this.template.id, { name: "long.html", content: long });
-    await setView(this.template.id, { name: "short.html", content: "hi" });
+    await writePlain(this.template.id, "long.html", long);
+    await writePlain(this.template.id, "short.html", "hi");
 
     const totals = newTotals();
 
@@ -55,7 +65,7 @@ describe("scripts/template/compress-views", function () {
   });
 
   it("only reports what it would do without --apply", async function () {
-    await setView(this.template.id, { name: "long.html", content: long });
+    await writePlain(this.template.id, "long.html", long);
 
     const totals = newTotals();
     await processView(key.view(this.template.id, "long.html"), {}, totals);
@@ -65,7 +75,7 @@ describe("scripts/template/compress-views", function () {
   });
 
   it("leaves a view saved since it was read", async function () {
-    await setView(this.template.id, { name: "long.html", content: long });
+    await writePlain(this.template.id, "long.html", long);
 
     const viewKey = key.view(this.template.id, "long.html");
     const pack = viewContent.pack;
@@ -87,7 +97,7 @@ describe("scripts/template/compress-views", function () {
   });
 
   it("writes compressed views back as written with --revert", async function () {
-    await setView(this.template.id, { name: "long.html", content: long });
+    await writePlain(this.template.id, "long.html", long);
 
     const viewKey = key.view(this.template.id, "long.html");
 
