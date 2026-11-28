@@ -2,7 +2,7 @@
 
 This module is the authoritative data layer for blog entries in Blot. It handles persistence, URL assignment, list membership, backlink tracking, dependency graph maintenance, scheduled publication, and full-text search for individual entries within a blog.
 
-All storage is backed by Redis. Entry data is serialised as JSON strings. Relationships (URL-to-path mappings, sorted membership lists, dependency sets) are maintained as separate Redis keys updated atomically alongside each write.
+All storage is backed by Redis. Entry data is serialised as JSON strings. Entries may store `body`, `teaser` and `teaserBody` as a position in `html` or `teaser` when they repeat it (`codec.js`), or have every field written out; readers accept both. Relationships (URL-to-path mappings, sorted membership lists, dependency sets) are maintained as separate Redis keys updated atomically alongside each write.
 
 ---
 
@@ -13,6 +13,7 @@ All storage is backed by Redis. Entry data is serialised as JSON strings. Relati
 | `index.js` | Public module surface. Re-exports `drop`, `get`, `getByUrl`, `instance`, `key`, `model`, `search`, and `set`. |
 | `model.js` | Canonical schema definition. Declares every field name and its expected type. Used by `helper/ensure` to validate entries before storage. |
 | `key.js` | Generates the Redis key strings used throughout the module. |
+| `codec.js` | How an entry is stored in its Redis string: `body`, `teaser` and `teaserBody` as positions in the field they repeat. |
 | `instance.js` | Minimal constructor function. Wraps a plain object in an `Entry` instance by copying all properties onto `this`. |
 | `get.js` | Retrieves one or more entries by file path from Redis. |
 | `getByUrl.js` | Retrieves a single entry by its public URL. |
@@ -75,7 +76,7 @@ Defined in `key.js`.
 
 | Key pattern | Type | Contains |
 |-------------|------|---------|
-| `blog:{blogID}:entry:{normalizedPath}` | string | JSON-serialised entry object |
+| `blog:{blogID}:entry:{normalizedPath}` | string | JSON-serialised entry object (see `codec.js`: read it with `codec.decode`, not `JSON.parse`, to get `body`, `teaser` and `teaserBody` back) |
 | `blog:{blogID}:url:{url}` | string | The `id` (normalised path) of the entry claiming that URL |
 | `blog:{blogID}:dependents:{path}` | set | Paths of entries that depend on this path |
 | `blog:{blogID}:search` | — | Referenced but not written by this module directly |
