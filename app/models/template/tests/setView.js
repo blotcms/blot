@@ -25,6 +25,28 @@ describe("template", () => {
     expect(savedView.content).toEqual(view.content);
   });
 
+  it("saves over a compressed source as written", async function () {
+    const viewContent = require("../util/viewContent");
+    const name = "compressed.html";
+    const viewKey = key.view(this.template.id, name);
+
+    await setView(this.template.id, { name, content: "first" });
+    await client
+      .multi()
+      .hSet(viewKey, viewContent.FIELD, await viewContent.pack("x".repeat(500)))
+      .hDel(viewKey, "content")
+      .exec();
+
+    expect((await getView(this.template.id, name)).content).toEqual(
+      "x".repeat(500)
+    );
+
+    await setView(this.template.id, { name, content: "second" });
+
+    expect(await client.hExists(viewKey, viewContent.FIELD)).toBeFalsy();
+    expect((await getView(this.template.id, name)).content).toEqual("second");
+  });
+
   it("stores file-backed partials under the literal reference from the content", async function () {
     // The key must stay verbatim: Mustache resolves "{{> /pages/home.txt}}"
     // by that exact string, so rewriting it (e.g. to a true-case entry path)

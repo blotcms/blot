@@ -109,6 +109,8 @@ Stored as a Redis hash at key `template:{id}:view:{viewName}`.
 | `url` | string | Primary URL pattern for this view. |
 | `urlPatterns` | array | Full list of URL patterns, including the primary. Stored separately at `template:{id}:url_patterns` as a Redis hash entry. |
 
+In Redis the source is either `content`, as written, or `contentBr`, compressed with Brotli (`util/viewContent.js`); a hash holds one or the other. `getView` reads the hash as Buffers and always returns `content` as a string, and it is the only reader of view hashes: the client-side cache keys a reply by its command alone, so a read decoding them as strings would be served the Buffers. `scripts/template/compress-views.js` compresses the views stored as written, or writes them back with `--revert`.
+
 ---
 
 ## Public API

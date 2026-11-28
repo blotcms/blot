@@ -18,6 +18,7 @@ var serializeRedisHashValues = require("models/redisHashSerializer");
 var clfdate = require("helper/clfdate");
 var applyUserRetrieveOptions = require("./util/applyUserRetrieveOptions");
 var isReadme = require("./util/isReadme");
+var viewContent = require("./util/viewContent");
 const MAX_VIEW_PAYLOAD_SIZE = 2 * 1024 * 1024;
 
 // options.source is the fingerprint of the folder file the view was read
@@ -331,6 +332,10 @@ module.exports = async function setView(templateID, updates, options = {}) {
   // Delete url and urlPatterns from Redis hash if they were removed
   var multi = client.multi();
   multi.hSet(viewKey, view);
+
+  // The source is saved as written, so drop any compressed copy the backfill
+  // left (util/viewContent)
+  multi.hDel(viewKey, viewContent.FIELD);
 
   if (shouldRemoveUrl) {
     multi.hDel(viewKey, "url");
