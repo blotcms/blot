@@ -286,10 +286,10 @@ html[data-auth="in"] .signed-in {
     margin-top: -4px;
   }
 
-  /* The buttons are 8px taller than the links; half that again keeps
-     their words on the links' line */
+  /* The 24px buttons are a little shorter than the links; a smaller lift
+     keeps their words on the links' line */
   .public-header .public-account {
-    margin-top: -8px;
+    margin-top: -2px;
   }
 }
 
@@ -311,26 +311,58 @@ html[data-auth="in"] .signed-in {
   background: #f9f9f9;
 }
 
-/* Sign up and Log in (or Dashboard): Dilling's outlined button (their
-   customer service page's Start chat, values read from the page), in the
-   links' system-ui type. The edge is a 1px outline drawn inside the box,
-   with a faint drop shadow; pointed at, it fills with a light grey.
+/* Sign up and Log in (or Dashboard): Are.na's small header buttons (values
+   read from are.na in light mode), in the links' system-ui type. Log in is
+   light grey; Sign up and Dashboard are filled, in our blue where Are.na's
+   is navy. Pointed at, the grey one gains a hairline border and the blue
+   one turns black, as theirs do.
    rgba(), not rgb( / ): the minifier drops slash colours in shorthands. */
 .public-header .public-account a {
-  padding: 8px 16px;
-  border-radius: 2px;
-  background: transparent;
-  color: rgb(38, 37, 36);
-  outline: 1px solid rgba(40, 35, 35, 0.2);
-  outline-offset: -1px;
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  transition: color 150ms cubic-bezier(.4, 0, .2, 1),
-    box-shadow 150ms cubic-bezier(.4, 0, .2, 1);
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: rgb(247, 247, 247);
+  color: rgb(51, 51, 51);
+  font-size: 12.5px;
+  font-weight: 700;
 }
 
 .public-header .public-account a:hover {
-  background: rgb(229, 229, 228);
-  color: rgb(38, 37, 36);
+  border-color: rgb(222, 222, 222);
+  background: rgb(247, 247, 247);
+  color: rgb(0, 0, 0);
+}
+
+.public-header .public-account a:active {
+  border-color: rgb(0, 0, 0);
+}
+
+.public-header .public-account a.public-account-primary {
+  background: var(--brochure-accent-color);
+  color: rgb(255, 255, 255);
+}
+
+.public-header .public-account a.public-account-primary:hover {
+  border-color: rgb(0, 0, 0);
+  background: rgb(0, 0, 0);
+  color: rgb(255, 255, 255);
+}
+
+.public-header .public-account a.public-account-primary:active {
+  border-color: var(--brochure-accent-color);
+  background: #3d84e6;
+}
+
+/* On phones they're taller to tap, as Are.na's are */
+@media (max-width: 520px) {
+  .public-header .public-account a {
+    height: 37px;
+    padding: 0 15px;
+  }
 }
 
 .public-header .public-navigation a:focus-visible,
