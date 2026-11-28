@@ -296,7 +296,7 @@
 .home-template-screenshot,
 .home-template-folder {
   grid-area: 1 / 1;
-  transition: opacity 300ms ease, transform 300ms ease;
+  transition: opacity 300ms ease;
 }
 
 .home-template-folder {
@@ -329,25 +329,23 @@
   overflow: hidden;
 }
 
+/* Pointing at a card (or focusing it) cross-fades the screenshot into the
+   folder; neither moves */
 .home-template:focus-visible .home-template-screenshot {
   opacity: 0;
-  transform: translateY(-10px);
 }
 
 .home-template:focus-visible .home-template-folder {
   opacity: 1;
-  transform: translateY(-10px);
 }
 
 @media (hover: hover) {
   .home-template:hover .home-template-screenshot {
     opacity: 0;
-    transform: translateY(-10px);
   }
 
   .home-template:hover .home-template-folder {
     opacity: 1;
-    transform: translateY(-10px);
   }
 }
 
@@ -802,7 +800,7 @@
 .home-template-screenshot,
 .home-template-folder {
   grid-area: 1 / 1;
-  transition: opacity 300ms ease, transform 300ms ease;
+  transition: opacity 300ms ease;
 }
 
 .home-template-screenshot {
