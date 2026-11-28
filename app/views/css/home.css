@@ -52,9 +52,87 @@
   box-shadow: 0 12px 32px rgb(0 0 0 / 18%), 0 2px 6px rgb(0 0 0 / 10%);
 }
 
-/* On the documentation page it sits on the left, under the copy */
-.docs-video .home-video {
+/* On the documentation page it sits on the left, under the copy, with a
+   line beside it that opens the video too (how/index.html), after riff 13's
+   "See it in two minutes": a round play button, the line, the length */
+.docs-video {
+  display: grid;
+  grid-template-columns: var(--home-video-w, 220px) minmax(0, 1fr);
+  align-items: center;
+  gap: 24px;
   margin: 24px 0 8px;
+}
+
+.docs-video .home-video {
+  margin: 0;
+}
+
+.video-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 24px;
+  /* rgba(), not rgb( / ): the minifier drops a slash colour from a
+     border shorthand, leaving the text colour */
+  border-top: 1px solid rgba(22, 22, 21, 0.12);
+  color: #161615;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.video-link:hover {
+  color: #161615;
+  text-decoration: none;
+}
+
+.video-link-play {
+  display: grid;
+  flex: 0 0 32px;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #e4e2dc;
+  transition: background-color .2s cubic-bezier(.645, .045, .355, 1),
+    transform .3s cubic-bezier(.16, 1, .3, 1);
+}
+
+.video-link-play svg {
+  width: 10px;
+  height: 10px;
+  margin-left: 2px;
+  fill: currentColor;
+}
+
+.video-link-time {
+  margin-left: auto;
+  color: #66635d;
+  font: 12px / 1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+.video-link:hover .video-link-play,
+.video-link:focus-visible .video-link-play {
+  background: var(--brochure-accent-color);
+  color: #fff;
+  transform: scale(1.06);
+}
+
+.video-link:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 4px;
+}
+
+@media (max-width: 600px) {
+  .docs-video {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .video-link-play {
+    transition: none;
+  }
 }
 
 .home-video:focus-visible {
