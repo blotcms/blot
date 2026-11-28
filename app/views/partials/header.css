@@ -285,6 +285,12 @@ html[data-auth="in"] .signed-in {
   .public-header .public-account {
     margin-top: -4px;
   }
+
+  /* The buttons are 8px taller than the links; half that again keeps
+     their words on the links' line */
+  .public-header .public-account {
+    margin-top: -8px;
+  }
 }
 
 .public-header .public-navigation a,
@@ -305,15 +311,26 @@ html[data-auth="in"] .signed-in {
   background: #f9f9f9;
 }
 
-/* Sign up and Log in (or Dashboard): always blue pills */
+/* Sign up and Log in (or Dashboard): Dilling's outlined button (their
+   customer service page's Start chat, values read from the page), in the
+   links' system-ui type. The edge is a 1px outline drawn inside the box,
+   with a faint drop shadow; pointed at, it fills with a light grey.
+   rgba(), not rgb( / ): the minifier drops slash colours in shorthands. */
 .public-header .public-account a {
-  background: var(--brochure-accent-color);
-  color: #fff;
+  padding: 8px 16px;
+  border-radius: 2px;
+  background: transparent;
+  color: rgb(38, 37, 36);
+  outline: 1px solid rgba(40, 35, 35, 0.2);
+  outline-offset: -1px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  transition: color 150ms cubic-bezier(.4, 0, .2, 1),
+    box-shadow 150ms cubic-bezier(.4, 0, .2, 1);
 }
 
 .public-header .public-account a:hover {
-  background: #0057c4;
-  color: #fff;
+  background: rgb(229, 229, 228);
+  color: rgb(38, 37, 36);
 }
 
 .public-header .public-navigation a:focus-visible,
