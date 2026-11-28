@@ -364,6 +364,7 @@ html[data-auth="in"] .signed-in {
     order: 2;
     flex: 1 1 100%;
     gap: 6px;
-    padding-left: 13px;
+    /* The first word, not its hover pill, on the 20px gutter */
+    padding-left: 5px;
   }
 }
