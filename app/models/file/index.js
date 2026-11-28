@@ -688,24 +688,38 @@ async function* flagged(blogID, dir) {
   }
 }
 
-// Forgets everything below a directory, deepest first: each subdirectory is
-// emptied before its parent's children are removed, a page at a time, so
-// each file's size is still in its parent's hash when it is counted. If this
-// stops part way, what is left is still a consistent subtree, except that a
-// parent's lowercased lookup may name a child already gone, until the parent
-// itself goes; the reconcile repairs that.
+// Forgets everything below a directory, deepest first, a HSCAN page of its
+// hash at a time: the page's subdirectories are emptied first, then the
+// page's children removed, so each file's size is still in its parent's hash
+// when it is counted, and only a page per level of depth is held. Removing
+// what a scan already returned never makes it miss a field still there. If
+// this stops part way, what is left is still a consistent subtree, except
+// that a parent's lowercased lookup may name a child already gone, until the
+// parent itself goes; the reconcile repairs that.
 async function removeBelow(blogID, dir) {
-  var entries = await scan(blogID, dir);
+  var cursor = "0";
 
-  for (var entry of entries)
-    if (entry.type === "dir") await removeBelow(blogID, child(dir, entry.name));
+  do {
+    var reply = await client.hScan(key.dir(blogID, dir), cursor, {
+      COUNT: PAGE,
+    });
+    var page = reply.entries.map(function (entry) {
+      return Object.assign({ name: entry.field }, parse(entry.value));
+    });
 
-  for (var i = 0; i < entries.length; i += PAGE) {
+    cursor = String(reply.cursor);
+
+    for (var entry of page)
+      if (entry.type === "dir")
+        await removeBelow(blogID, child(dir, entry.name));
+
+    if (!page.length) continue;
+
     var multi = client.multi();
     var bytes = 0;
     var files = 0;
 
-    for (var found of entries.slice(i, i + PAGE)) {
+    for (var found of page) {
       if (found.type === "file") {
         bytes += found.size;
         files += 1;
@@ -728,7 +742,7 @@ async function removeBelow(blogID, dir) {
     if (files) multi.hIncrBy(key.totals(blogID), "files", -files);
 
     await multi.exec();
-  }
+  } while (cursor !== "0");
 }
 
 // Forgets a file, or a directory and everything below it. Resolves to the
