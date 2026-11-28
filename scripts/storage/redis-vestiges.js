@@ -71,7 +71,8 @@
 //                    issuance is never touched
 //   lookups          deletes handle:<h> and domain:<d> whose value is a blog
 //                    which is gone (see deleted-blogs) or an all-digit ID
-//                    of the old numeric format, and email:<e>, customer:<c>
+//                    of the old numeric format that the blogs set doesn't
+//                    list, and email:<e>, customer:<c>
 //                    and paypal:<p> whose value is a user which is gone (in
 //                    no uids set and with no record) or an all-digit ID.
 //                    A handle which names a live blog stays, even a former
@@ -87,7 +88,8 @@
 //                    set is not touched, its ID is printed for review
 //   legacy           deletes the keys of removed code: image:dimensions:*,
 //                    switch-blog-id-format:*, sync:again:*, sync:lease:*,
-//                    keys of numeric blog IDs (blog:<digits>:*, the blog_
+//                    keys of numeric blog IDs not in the blogs set
+//                    (blog:<digits>:*, the blog_
 //                    IDs never match) and blot:stats, analytics:all,
 //                    analytics:today, blot:backups:daily, blot:backups:hourly
 //                    and storage:folder:mirror:complete. Nothing reads or
@@ -150,6 +152,10 @@ async function* scan(pattern) {
     cursor = String(reply.cursor);
 
     if (reply.keys.length) yield reply.keys;
+
+    // A full walk of the keyspace is thousands of pages: leave room for the
+    // app's commands between them
+    await pause(PAGE_PAUSE_MS);
   } while (cursor !== "0");
 }
 
@@ -1007,6 +1013,10 @@ const LOOKUPS = {
   paypal: "user",
 };
 
+const DELETE_IF_UNCHANGED = `
+if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("DEL", KEYS[1]) end
+return 0`;
+
 async function userExists(uid) {
   if (await client.sIsMember(userKey.uids, uid)) return true;
   return !!(await client.exists(userKey.user(uid)));
@@ -1015,7 +1025,12 @@ async function userExists(uid) {
 // "dangling", "live" or "unrecognised" for what a lookup key's value names
 async function judge(kind, value) {
   if (typeof value !== "string") return "unrecognised";
-  if (DIGITS.test(value)) return "dangling";
+
+  // A pre-2020 numeric ID: gone unless something still lists it
+  if (DIGITS.test(value)) {
+    const set = kind === "blog" ? Blog.key.ids : userKey.uids;
+    return (await client.sIsMember(set, value)) ? "live" : "dangling";
+  }
 
   if (kind === "blog") {
     if (!BLOG_ID.test(value)) return "unrecognised";
@@ -1072,10 +1087,16 @@ async function lookups({
 
     for (const [key, kind, value] of pending) {
       if ((await client.type(key)) !== "string") continue;
-      if ((await client.get(key)) !== value) continue;
+      if ((await mget([key]))[0] !== value) continue;
       if ((await judge(kind, value)) !== "dangling") continue;
 
-      result.deleted += await client.del(key);
+      // A handle or domain naming a gone blog counts as free, so it can be
+      // claimed between the check and the delete: compared and deleted in
+      // one step, as Blog.remove does
+      result.deleted += await client.eval(DELETE_IF_UNCHANGED, {
+        keys: [key],
+        arguments: [value],
+      });
     }
   }
 
@@ -1194,7 +1215,7 @@ const LEGACY_PREFIXES = [
   "sync:again:",
   "sync:lease:",
 ];
-const LEGACY_NUMERIC_BLOG = /^blog:\d+:/;
+const LEGACY_NUMERIC_BLOG = /^blog:(\d+):/;
 const LEGACY_EXACT = [
   "blot:stats",
   "analytics:all",
@@ -1222,11 +1243,21 @@ async function legacy({
   for (const prefix of LEGACY_PREFIXES)
     for await (const page of scan(prefix + only)) await take(page);
 
-  // Numeric IDs only: blog_ IDs and blog:SITE:* never match the regex
+  // Numeric IDs only: blog_ IDs and blog:SITE:* never match the regex. One
+  // still in the blogs set is left alone
   for await (const page of scan(
     "blog:" + (only === "*" ? "[0-9]*" : only + ":*")
-  ))
-    await take(page.filter((key) => LEGACY_NUMERIC_BLOG.test(key)));
+  )) {
+    const keys = [];
+
+    for (const key of page) {
+      const match = LEGACY_NUMERIC_BLOG.exec(key);
+      if (match && !(await client.sIsMember(Blog.key.ids, match[1])))
+        keys.push(key);
+    }
+
+    await take(keys);
+  }
 
   const present = [];
 
@@ -1257,10 +1288,11 @@ const SUBCOMMANDS = {
   "template-shares": templateShares,
   permalinks,
   rendered,
+  // Before ssl, which keeps a certificate while its domain: key exists
+  lookups,
   ssl,
   "ssl-history": sslHistory,
   "ssl-challenges": sslChallenges,
-  lookups,
   "removed-users": removedUsers,
   legacy,
 };

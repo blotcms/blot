@@ -409,6 +409,7 @@ describe("scripts/storage/redis-vestiges", function () {
   });
 
   it("lookups deletes keys which name a blog or user that is gone, not the rest", async function () {
+    var Blog = require("models/blog");
     var userKey = require("models/user/key");
     var goneBlog = "blog_" + "4a2b3c4d".repeat(4);
     var goneUser = "user_VESTIGESGONE";
@@ -428,6 +429,7 @@ describe("scripts/storage/redis-vestiges", function () {
       remember("handle:vestiges-odd"),
       remember("email:vestiges-live@example.com"),
       remember("customer:vestiges-live"),
+      remember("handle:vestiges-numeric-live"),
     ];
 
     await client.set(dead[0], goneBlog);
@@ -442,7 +444,9 @@ describe("scripts/storage/redis-vestiges", function () {
     await client.set(kept[2], "not an id");
     await client.set(kept[3], liveUser);
     await client.set(kept[4], liveUser);
+    await client.set(kept[5], "4242");
     await client.sAdd(userKey.uids, liveUser);
+    await client.sAdd(Blog.key.ids, "4242");
 
     try {
       var report = await vestiges.lookups({ only: "vestiges-*" });
@@ -459,9 +463,10 @@ describe("scripts/storage/redis-vestiges", function () {
 
       expect(applied.deleted).toBe(7);
       expect(await client.exists(dead)).toBe(0);
-      expect(await client.exists(kept)).toBe(5);
+      expect(await client.exists(kept)).toBe(6);
     } finally {
       await client.sRem(userKey.uids, liveUser);
+      await client.sRem(Blog.key.ids, "4242");
     }
   });
 
@@ -554,5 +559,26 @@ describe("scripts/storage/redis-vestiges", function () {
 
     expect(await client.exists(dead)).toBe(0);
     expect(await client.exists(kept)).toBe(3);
+  });
+
+  it("legacy leaves a numeric blog ID which the blogs set still lists", async function () {
+    var Blog = require("models/blog");
+    var info = remember("blog:99001123:info");
+
+    await client.hSet(info, { handle: "x" });
+    await client.sAdd(Blog.key.ids, "99001123");
+
+    try {
+      var applied = await vestiges.legacy({
+        only: "99001123",
+        apply: true,
+        exact: [],
+      });
+
+      expect(applied.deleted).toBe(0);
+      expect(await client.exists(info)).toBe(1);
+    } finally {
+      await client.sRem(Blog.key.ids, "99001123");
+    }
   });
 });
