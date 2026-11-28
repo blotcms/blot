@@ -181,8 +181,8 @@ describe("models/file", function () {
       }
 
       // A hash, a lowercased lookup and a natural-order sorted set each for
-      // "/" and "/d", the path set and the totals
-      expect(keys.length).toEqual(8);
+      // "/" and "/d", and the totals
+      expect(keys.length).toEqual(7);
     });
   });
 
