@@ -19,7 +19,8 @@
 #   switch     freeze the app, promote, wipe the cache, move the Elastic IP,
 #              stop the old units, import permabans, unfreeze
 #   settle     rolling deploy of the same image, verify, deploys resume
-#   finish     after a day or so: terminate the old hosts (by explicit ID only)
+#   finish     once the new host has run smoothly for ~15 minutes after settle:
+#              terminate the old hosts (by explicit ID only)
 #
 # restore is not part of a cycle: it is disaster recovery (#2261) for when the
 # host is gone, with no old host to read from. See "Recovery" in README.md.
@@ -873,7 +874,7 @@ phase_settle() {
   say "Deploys can resume"
   act on "$NEW" "sudo rm -f $PAUSE_FILE"
   act on "$OLD_NOW" "sudo rm -f $PAUSE_FILE"
-  say "Settled. Keep the old host for about a day as the rollback, then: finish"
+  say "Settled. Keep the old host as the rollback until the new one has served ~15 minutes of traffic smoothly, then: finish"
 }
 
 # ---- finish --------------------------------------------------------------

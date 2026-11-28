@@ -377,8 +377,12 @@ looking at the hosts, so after a failure fix the cause and run it again. Check
   on the replica. Then deploys resume.
 - **`finish`** terminates only the instances named with `--old-instance`, never
   `<new>` or the holder of the Elastic IP, and only once `settle` has run. Run
-  it about a day after `settle`. It stops at termination protection and prints
-  the command that lifts it; that is your decision.
+  it once the new host has served production smoothly for about 15 minutes
+  after `settle`: both units healthy with no restarts (`scripts/prod/read.sh
+  ps`), no rise in 5xx (`read.sh access`), no new error patterns (`read.sh
+  errors app-log --since 15m`), `/redis-health` fine and Redis taking writes.
+  Until then the old host is the rollback (below). It stops at termination
+  protection and prints the command that lifts it; that is your decision.
 - **Hours.** Every phase refuses from 15 minutes before the 01:00 and 05:00 UTC
   hours until they end (wildcard renewal, file cleanup), unless `--any-time`.
 - **Traffic.** There is no real quiet time. Over a week of access logs in late

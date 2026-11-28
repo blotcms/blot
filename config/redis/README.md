@@ -238,7 +238,9 @@ before `switch`: `master_link_status:up`, `DBSIZE` close to the old host's,
 `maxmemory` what you expect for its RAM, and the sample from `tcpmem-log.sh`
 arrives (`GET blot:redis-host:tcpmem` has `ram_total`). Do not deploy or
 restart the proxy around the promotion. The old host replicates from the new
-one until `finish` (about a day after `settle`).
+one until `finish` (once the new host has served about 15 minutes of
+production traffic smoothly after `settle`; see "Host cycle" in
+`config/host/README.md`).
 
 ## What gets installed
 
