@@ -357,6 +357,13 @@ html[data-auth="in"] .signed-in {
   background: #3d84e6;
 }
 
+/* The rule above that shows signed-in links (display: block !important)
+   would undo the buttons' flex centring, leaving Dashboard's word at the
+   top of its box */
+html[data-auth="in"] .public-header .public-account a.signed-in {
+  display: inline-flex !important;
+}
+
 /* On phones they're taller to tap, as Are.na's are */
 @media (max-width: 520px) {
   .public-header .public-account a {
