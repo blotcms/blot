@@ -20,6 +20,30 @@ describe("Blog.remove", function () {
     expect(results).toEqual([]);
   });
 
+  it("removes the keys of its former handles and other hosts, and no others", async function () {
+    var client = require("models/client");
+    var set = require("../set");
+
+    await set(this.blog.id, { handle: "exampleblogrenamed" });
+    await client.set("domain:www.example-alias.com", this.blog.id);
+    await client.set("handle:someoneelse", "blog_someoneelse");
+
+    try {
+      expect(await client.get("handle:exampleblog")).toEqual(this.blog.id);
+
+      await remove(this.blog.id);
+
+      expect(await client.get("handle:exampleblog")).toBeNull();
+      expect(await client.get("handle:exampleblogrenamed")).toBeNull();
+      expect(await client.get("domain:www.example-alias.com")).toBeNull();
+      expect(await client.get("handle:someoneelse")).toEqual(
+        "blog_someoneelse"
+      );
+    } finally {
+      await client.del("handle:someoneelse");
+    }
+  });
+
   it("removes the blog's folder and nothing beside it", async function () {
     var folder = require("storage/folder");
     var otherID = this.blog.id + "0";

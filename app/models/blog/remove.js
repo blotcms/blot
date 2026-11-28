@@ -80,6 +80,7 @@ var remove = async function remove(blogID) {
   await wipeFolders(blog);
   await dropTemplates(blog);
   await deleteKeys(blog);
+  await deleteLookups(blogID);
   await purgeQueue.blog(blog.id);
   await markRemoved(blogID);
 
@@ -96,10 +97,11 @@ async function markRemoved(blogID) {
 
 // What is left once the blog's hash is gone: its keys went with it (deleteKeys
 // is one transaction), so it is the Discover posts, folder and generated
-// files, and the CDN purge.
+// files, the former handles and hosts which name it, and the CDN purge.
 async function finishWithoutRecord(blogID) {
   await dropFromDiscover({ id: blogID });
   await wipeFolders({ id: blogID });
+  await deleteLookups(blogID);
   await purgeQueue.blog(blogID);
 }
 
@@ -152,7 +154,6 @@ async function deleteKeys(blog) {
     remove.push("domain:" + blog.handle + "." + config.host);
   }
 
-  // TODO ALSO remove alternate key with/out 'www', e.g. www.example.com
   if (blog.domain) {
     remove.push("domain:" + blog.domain);
     remove.push("domain:" + BackupDomain(blog.domain));
@@ -197,6 +198,49 @@ async function deleteKeys(blog) {
   if (remove.length > 0) multi.del(remove);
   multi.sRem(key.ids, blog.id);
   await multi.exec();
+}
+
+// Deletes the handle: and domain: keys which still name the blog: Blog.set
+// keeps a former handle's key so the old address redirects, and the www or
+// apex form of a domain can name it too. Run once the blog has left the
+// blogs set, so its current handle stays claimed until then. Compared and
+// deleted in one step: a key which names another blog by then must stay.
+var DELETE_IF_NAMES_BLOG = `
+for i, name in ipairs(KEYS) do
+  if redis.call("GET", name) == ARGV[1] then redis.call("DEL", name) end
+end
+return 0`;
+
+async function deleteLookups(blogID) {
+  for (const pattern of ["handle:*", "domain:*"]) {
+    var cursor = START_CURSOR;
+
+    do {
+      var res = await client.scan(cursor, {
+        MATCH: pattern,
+        COUNT: SCAN_SIZE,
+      });
+
+      if (!res || typeof res !== "object") {
+        throw new Error("Unexpected SCAN reply: " + JSON.stringify(res));
+      }
+
+      cursor = String(res.cursor);
+
+      if (Array.isArray(res.keys) && res.keys.length) {
+        var values = await client.sendCommand(["MGET", ...res.keys]);
+        var naming = res.keys.filter(function (name, i) {
+          return values[i] === blogID;
+        });
+
+        if (naming.length)
+          await client.eval(DELETE_IF_NAMES_BLOG, {
+            keys: naming,
+            arguments: [blogID],
+          });
+      }
+    } while (cursor !== START_CURSOR);
+  }
 }
 
 async function disconnectClient(blog) {
