@@ -12,6 +12,8 @@
   column-gap: 64px;
   justify-content: center;
   align-items: start;
+  /* With the title row's 16px, the first post starts 24px under the title,
+     as the cards do on /templates */
   padding-top: 8px;
 }
 
@@ -24,19 +26,17 @@
   grid-column: 2;
   justify-self: start;
   width: 240px;
-  /* The box's top in line with the top of the first post's Visit site pill,
-     15.5px into the post. Sticky, it keeps that plus the feed's 8px from the
-     top. */
-  margin-top: 15.5px;
+  /* Its hairline in line with the top of the first post */
+  margin-top: 0;
   position: sticky;
-  top: 23.5px;
+  top: 24px;
 }
 
-/* The featured sites, in a box */
+/* The featured sites, flat under a hairline like the homepage's rows
+   (css/home.css) rather than in a bordered box */
 .discover-sites {
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 16px 16px 8px;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--border-color);
 }
 
 .discover-sites-head {
@@ -50,7 +50,7 @@
 .discover-sites-title {
   margin: 0;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 /* Like Visit site: text in the accent colour, a pill on hover */
@@ -158,6 +158,10 @@
   font-size: 15px;
   line-height: 21px;
   border-bottom: 1px solid var(--border-color);
+}
+
+.discover-grid > .discover-card:first-child {
+  padding-top: 0;
 }
 
 .discover-card a {
