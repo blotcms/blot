@@ -108,7 +108,9 @@
 .video-link-time {
   margin-left: auto;
   color: #66635d;
-  font: 12px / 1 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
 .video-link:hover .video-link-play,
