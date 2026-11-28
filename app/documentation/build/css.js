@@ -22,6 +22,7 @@ const DASHBOARD_SHARED_FILES = [
   "css/list-controls.css",
   "css/path.css",
   "css/steps.css",
+  "css/trail.css",
   "css/truncate.css",
   "partials/breadcrumbs.css",
   "partials/footer.css",

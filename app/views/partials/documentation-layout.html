@@ -1,8 +1,22 @@
+<!-- Above the hairline, on the left gutter: the dashboard's breadcrumb
+     trail (css/trail.css, from documentation/selected.js), on every page,
+     /how's being "Documentation" alone. The row has a fixed height, so the
+     hairline sits at the same height on every page. -->
+<div class="documentation-top">
+  {{#breadcrumbs.length}}
+  <nav class="trail documentation-trail" aria-label="Breadcrumb">
+    <ol>
+      {{#breadcrumbs}}
+      {{^last}}<li><a href="{{{url}}}">{{label}}</a></li>{{/last}}
+      {{#last}}<li aria-current="page"><span class="truncate">{{label}}</span></li>{{/last}}
+      {{/breadcrumbs}}
+    </ol>
+  </nav>
+  {{/breadcrumbs.length}}
+</div>
+
 <div class="documentation-layout">
   <aside class="documentation-sidebar">
-    <!-- The section's title, in the type of the wide pages' titles
-         (css/blot.css, .wide-page h1), above its links -->
-    <a class="documentation-title" href="/how">Documentation</a>
     <nav aria-label="Documentation">
       {{> links}}
     </nav>
@@ -15,19 +29,6 @@
   </aside>
 
   <main id="main" tabindex="-1" class="documentation-article main-section-content {{#show-toc-or-on-this-page}}js-toc-content{{/show-toc-or-on-this-page}}">
-    <!-- Where the page is, on the section title's line (documentation/
-         selected.js builds the trail; pages one level down have none) -->
-    {{^hidebreadcrumbs}}
-    {{#breadcrumbs.length}}
-    <nav class="documentation-breadcrumbs" aria-label="Breadcrumb">
-      <ol>
-        {{#breadcrumbs}}
-        <li>{{#last}}<span aria-current="page">{{label}}</span>{{/last}}{{^last}}<a href="{{{url}}}">{{label}}</a>{{/last}}</li>
-        {{/breadcrumbs}}
-      </ol>
-    </nav>
-    {{/breadcrumbs.length}}
-    {{/hidebreadcrumbs}}
     {{> body}}
   </main>
 

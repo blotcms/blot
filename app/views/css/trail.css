@@ -1,6 +1,7 @@
 /*
   Breadcrumb trails: the dashboard's breadcrumbs (partials/dashboard-trail.html,
-  from res.locals.breadcrumbs), on every page more than one level deep.
+  from res.locals.breadcrumbs), on every page more than one level deep, and
+  the documentation's.
 
   <nav class="trail" aria-label="Breadcrumb">
     <ol>
@@ -11,6 +12,11 @@
 
   One line. The current page fills what the links leave and takes a middle
   ellipsis (js/truncate.js); links past their share end in an ellipsis.
+
+  Shared with the documentation (build/css.js), whose pages show the same
+  trail (partials/documentation-layout.html). Its pages don't load the
+  dashboard's tokens (dashboard/css/tokens.css), so each token here falls
+  back to the dashboard's own value.
 */
 
 .trail {
@@ -25,7 +31,7 @@
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: var(--text-sm);
+  font-size: var(--text-sm, 13px);
   white-space: nowrap;
 }
 
@@ -37,7 +43,7 @@
   max-width: 40%;
   margin: 0;
   padding: 0;
-  color: var(--secondary-text-color);
+  color: var(--secondary-text-color, #666);
 }
 
 /* Its width never depends on its text, so truncate.js can fit it */
@@ -50,8 +56,8 @@
 
 .trail li + li::before {
   flex: 0 0 auto;
-  padding: 0 var(--space-2);
-  color: var(--secondary-text-color);
+  padding: 0 var(--space-2, 8px);
+  color: var(--secondary-text-color, #666);
   content: "\203A";
   /* Empty alt text, so screen readers skip the separator; browsers without
      this syntax ignore it and keep the line above */
@@ -61,19 +67,19 @@
 .trail a {
   min-width: 0;
   overflow: hidden;
-  color: var(--secondary-text-color);
+  color: var(--secondary-text-color, #666);
   text-decoration: none;
   text-overflow: ellipsis;
   transition: color 150ms ease;
 }
 
 .trail a:hover {
-  color: var(--accent-hover-color);
+  color: var(--accent-hover-color, #1a75e5);
   text-decoration: underline;
 }
 
 .trail a:active {
-  color: var(--accent-active-color);
+  color: var(--accent-active-color, #0058c2);
 }
 
 .trail a:focus-visible {
@@ -88,7 +94,7 @@
 }
 
 .dashboard-trail ol {
-  font-size: var(--text-sm);
+  font-size: var(--text-sm, 13px);
 }
 
 .dashboard-trail li,
@@ -118,8 +124,8 @@
 
   .dashboard-trail li:first-child:nth-last-child(n + 4)::after {
     flex: 0 0 auto;
-    padding-left: var(--space-2);
-    color: var(--secondary-text-color);
+    padding-left: var(--space-2, 8px);
+    color: var(--secondary-text-color, #666);
     content: "\203A  \2026";
     content: "\203A  \2026" / "";
   }

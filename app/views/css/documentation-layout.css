@@ -40,7 +40,7 @@ html:has(.documentation-layout)::-webkit-scrollbar-thumb {
   align-items: start;
   /* The hairline of the pages as wide as the homepage (css/blot.css,
      .wide-page): 48px below the header, inside the homepage's gutters */
-  margin: 48px 30px 0;
+  margin: 10px 30px 0;
   padding: 14px 0 40px;
   border-top: 1px solid var(--border-color);
   color: var(--text-color);
@@ -62,10 +62,9 @@ html:has(.documentation-layout)::-webkit-scrollbar-thumb {
   overflow-wrap: break-word;
 }
 
-/* Its baseline on the section title's (19px on a 28px line, 14px text on a
-   20px one): 6px lower */
+/* Level with the sidebar's first link */
 .documentation-article > h1 {
-  margin: 6px 0 24px;
+  margin: 0 0 24px;
   padding: 0;
   font-size: 14px;
   font-weight: 500;
@@ -74,51 +73,6 @@ html:has(.documentation-layout)::-webkit-scrollbar-thumb {
 
 .documentation-article > p {
   margin: 16px 0 0;
-}
-
-/* The breadcrumbs (partials/documentation-layout.html) take the line the
-   heading would, on the section title's baseline, in the sidebar links'
-   type; the heading follows */
-.documentation-breadcrumbs ol {
-  display: flex;
-  flex-wrap: wrap;
-  max-width: none;
-  margin: 6px 0 0;
-  padding: 0;
-  list-style: none;
-  font-size: 13px;
-  font-weight: 460;
-  line-height: 20px;
-  letter-spacing: -.04px;
-}
-
-.documentation-breadcrumbs li {
-  margin: 0;
-  padding: 0;
-}
-
-.documentation-breadcrumbs li + li::before {
-  margin: 0 8px;
-  color: rgb(18 18 18 / 25%);
-  content: "/";
-}
-
-.documentation-breadcrumbs a {
-  color: rgb(18 18 18 / 40%);
-  text-decoration: none;
-}
-
-.documentation-breadcrumbs a:hover {
-  color: var(--text-color);
-}
-
-.documentation-breadcrumbs [aria-current] {
-  color: var(--text-color);
-}
-
-.documentation-breadcrumbs + h1,
-.documentation-article > .documentation-breadcrumbs + h1 {
-  margin-top: 24px;
 }
 
 .documentation-article > h2 {
@@ -186,25 +140,6 @@ html:has(.documentation-layout)::-webkit-scrollbar-thumb {
   font: inherit;
 }
 
-/* The section's title, as the wide pages show theirs (css/blot.css,
-   .wide-page h1): 19px, 14px under the hairline */
-.documentation-title {
-  display: block;
-  margin-bottom: 20px;
-  color: var(--text-color);
-  font-size: 19px;
-  font-weight: 500;
-  line-height: 28px;
-  letter-spacing: -0.01em;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.documentation-title:hover {
-  color: var(--text-color);
-  text-decoration: none;
-}
-
 .documentation-sidebar nav + nav {
   margin-top: 30px;
 }
@@ -257,27 +192,13 @@ html:has(.documentation-layout)::-webkit-scrollbar-thumb {
   outline-offset: -1px;
 }
 
-/* Narrower, the sidebar's links go (as before), and its title takes a row
-   of its own above the article */
+/* Narrower, the sidebar goes */
 @media (max-width: 1080px) {
   .documentation-sidebar {
-    grid-column: 1 / -1;
-    position: static;
-    max-width: none;
-    max-height: none;
-    overflow: visible;
-  }
-
-  .documentation-sidebar nav {
     display: none;
   }
 
-  .documentation-title {
-    margin-bottom: 32px;
-  }
-
-  .documentation-article > h1,
-  .documentation-breadcrumbs ol {
+  .documentation-article > h1 {
     margin-top: 0;
   }
 }
@@ -286,6 +207,39 @@ html:has(.documentation-layout)::-webkit-scrollbar-thumb {
   .documentation-layout {
     /* The text in line with the hairline, at the homepage's phone gutter */
     --documentation-gutter: 0px;
+    margin-inline: 20px;
+  }
+}
+
+/* The breadcrumb trail's row (css/trail.css), on the left gutter above the
+   hairline: 18px under the header, a 20px line, 10px above the hairline, so
+   the hairline is 48px down as on the other wide pages (css/blot.css,
+   .wide-page). Empty on /how. */
+.documentation-top {
+  height: 20px;
+  margin: 18px 30px 0;
+}
+
+.documentation-trail ol {
+  line-height: 20px;
+}
+
+/* Every part one very light grey, the current page included; a link
+   darkens when pointed at */
+.documentation-trail li,
+.documentation-trail li:last-child,
+.documentation-trail li + li::before,
+.documentation-trail a {
+  color: #c8c8c8;
+}
+
+.documentation-trail a:hover {
+  color: var(--medium-text-color);
+  text-decoration: none;
+}
+
+@media (max-width: 768px) {
+  .documentation-top {
     margin-inline: 20px;
   }
 }
