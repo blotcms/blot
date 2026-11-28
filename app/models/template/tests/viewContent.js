@@ -49,6 +49,15 @@ describe("template viewContent", function () {
     expect(view).toEqual({ name: "a.html", content: long });
   });
 
+  it("unpacks a large source off the main thread as well", async function () {
+    var source = require("crypto").randomBytes(150000).toString("hex");
+    var packed = await viewContent.pack(source);
+    expect(packed.length).toBeGreaterThan(32 * 1024);
+
+    var view = await viewContent.unpack({ contentBr: packed });
+    expect(view.content).toEqual(source);
+  });
+
   it("unpacks a view stored as written", async function () {
     var view = await viewContent.unpack({
       name: Buffer.from("a.html"),

@@ -30,6 +30,14 @@ const MIN_BYTES = 256;
 // large template, 1 MB of views, in about 60 ms) and decompresses as fast
 const QUALITY = 5;
 
+// Partials are read one after another, so each view a render reads waits for
+// its own decompression. Through the thread pool that took about 1 ms a view
+// on a cold render (25 ms for a large template's 20 views), against well
+// under 0.1 ms in the thread for a typical view. So a view is decompressed
+// in the thread unless it is large enough to hold the event loop up
+// (32 KB compressed is about 150 KB of source, about 0.5 ms).
+const SYNC_MAX_BYTES = 32 * 1024;
+
 // Resolves with the compressed source, or null to store it as written
 async function pack(content) {
   if (typeof content !== "string") return null;
@@ -76,9 +84,12 @@ async function unpack(hash) {
   // setView and the backfill each leave one of the two fields, in one
   // MULTI or script. Were both ever there, content would be what was written.
   if (hash[FIELD] !== undefined && view.content === undefined) {
-    view.content = (await brotliDecompress(toBuffer(hash[FIELD]))).toString(
-      "utf8"
-    );
+    const packed = toBuffer(hash[FIELD]);
+    const source =
+      packed.length <= SYNC_MAX_BYTES
+        ? zlib.brotliDecompressSync(packed)
+        : await brotliDecompress(packed);
+    view.content = source.toString("utf8");
   }
 
   return view;
