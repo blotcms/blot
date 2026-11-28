@@ -52,19 +52,16 @@
   box-shadow: 0 12px 32px rgb(0 0 0 / 18%), 0 2px 6px rgb(0 0 0 / 10%);
 }
 
-/* On the documentation page it sits on the left, under the copy, with a
-   line beside it that opens the video too (how/index.html), after riff 13's
-   "See it in two minutes": a round play button, the line, the length */
+/* On the documentation page it sits on the left, under the copy, below a
+   line the article's full width that opens the video too (how/index.html),
+   after riff 13's "See it in two minutes": a round play button, the line,
+   the length */
 .docs-video {
-  display: grid;
-  grid-template-columns: var(--home-video-w, 220px) minmax(0, 1fr);
-  align-items: center;
-  gap: 24px;
   margin: 24px 0 8px;
 }
 
 .docs-video .home-video {
-  margin: 0;
+  margin: 24px 0 0;
 }
 
 .video-link {
@@ -123,12 +120,6 @@
 .video-link:focus-visible {
   outline: 2px solid var(--accent-color);
   outline-offset: 4px;
-}
-
-@media (max-width: 600px) {
-  .docs-video {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
