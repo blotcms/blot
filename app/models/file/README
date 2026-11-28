@@ -107,7 +107,7 @@ All return promises.
 | `remove(blogID, path)` | Forget a file, or a directory and its whole subtree. Resolves to the removed record, or null |
 | `removeAll(blogID)` | Forget the whole folder |
 | `checkSorts(blogID, { apply, order })` | Async iterator of `{ dir, order, state, expected, card, bytes, longest }` per directory and order: `state` is `ok`, `missing` or `mismatched`. With `apply`, rebuilds each set which isn't ok; must run under the sync lock then |
-| `rebuild(blogID, records)` | Replace the index with records from a full listing (an iterable or async iterable). Resolves to `{ files, dirs, bytes, skipped }`. A record which conflicts with one before it (below a file, or a file and a directory at one path, which S3 can hold and a file system cannot) is skipped and listed in `skipped` as `{ path, type, code }`. Flags of unchanged files are carried over |
+| `rebuild(blogID, records)` | Replace the index with records from a full listing (an iterable or async iterable). Resolves to `{ files, dirs, bytes, skipped }`. A record which conflicts with one before it (below a file, or a file and a directory at one path, which S3 can hold and a file system cannot) is skipped and listed in `skipped` as `{ path, type, code }`. Flags of unchanged files are carried over. Before writing it also deletes any of the blog's index keys a walk from the root doesn't reach (a `SCAN` of the keyspace) |
 
 Removing a directory goes through its subtree deepest first, a directory at a time and a page of it at a time, so each file's size is still in its parent's hash when the totals are corrected. If it stops part way, what is left is consistent apart from a lowercased lookup which may still name a child already gone, until its directory goes too.
 
