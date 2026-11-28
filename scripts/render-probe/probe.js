@@ -476,6 +476,11 @@ async function catalogTimings(blog, entries) {
     tryResolve("models/cache/clone") ? "models/cache/clone" : "blog/lib/clone"
   );
   const { getAll } = require("blog/lib/models");
+  // As Entry.get parses them (models/entry/codec restores the fields an
+  // entry stores as positions); images from before the codec use JSON.parse
+  const parseEntry = tryResolve("models/entry/codec")
+    ? require("models/entry/codec").decode
+    : JSON.parse;
 
   const elapsed = (start) => Math.round((performance.now() - start) * 10) / 10;
   const timed = async (fn) => {
@@ -539,7 +544,7 @@ async function catalogTimings(blog, entries) {
       0
     );
     const [, parseMs] = await timed(async () => {
-      for (const value of values) if (value) parsed.push(JSON.parse(value));
+      for (const value of values) if (value) parsed.push(parseEntry(value));
     });
     batches.push({ keys: keys.length, bytes, mgetMs, parseMs });
   }

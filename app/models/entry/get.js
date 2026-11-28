@@ -3,6 +3,7 @@ var type = require("helper/type");
 
 var redis = require("models/client");
 var entryKey = require("./key").entry;
+var codec = require("./codec");
 
 var Entry = require("./instance");
 
@@ -79,7 +80,7 @@ async function readInBatches(keys) {
     var values = (await redis.mGet(keys.slice(i, i + BATCH_SIZE))) || [];
 
     values.forEach(function (value) {
-      if (value) entries.push(new Entry(JSON.parse(value)));
+      if (value) entries.push(new Entry(codec.decode(value)));
     });
   }
 
