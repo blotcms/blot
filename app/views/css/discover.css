@@ -4,13 +4,15 @@
   container: discover / inline-size;
 }
 
-/* The feed and the sites box side by side, a fixed gap apart, centred on the
-   page as one block, so their distance never depends on the window */
+/* On the homepage's three columns (css/home.css, .home-grid): People in
+   column one, where the homepage puts each row's title, and the feed in
+   columns two and three. A post keeps a 560px measure from column two's
+   edge; a featured site takes both columns, so the wide plates break the
+   column of posts the way the homepage's template squares do. */
 .discover {
   display: grid;
-  grid-template-columns: minmax(0, 560px) 240px;
-  column-gap: 64px;
-  justify-content: center;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: var(--home-gutter, 30px);
   align-items: start;
   /* With the title row's 16px, the first post starts 24px under the title,
      as the cards do on /templates */
@@ -18,18 +20,22 @@
 }
 
 .discover-main {
-  grid-column: 1;
+  grid-column: 2 / span 2;
+  grid-row: 1;
   min-width: 0;
 }
 
 .discover-sidebar {
-  grid-column: 2;
-  justify-self: start;
-  width: 240px;
+  grid-column: 1;
+  grid-row: 1;
   /* Its hairline in line with the top of the first post */
   margin-top: 0;
   position: sticky;
   top: 24px;
+}
+
+.discover-sites {
+  max-width: 300px;
 }
 
 /* The featured sites, flat under a hairline like the homepage's rows
@@ -145,6 +151,30 @@
   margin: 0;
   padding: 0;
   max-width: 560px;
+}
+
+/* On /discover the hairlines between items run across both columns, and a
+   post's body keeps the 560px measure (36px avatar, 12px gap, 512px) */
+.discover-page .discover-grid {
+  max-width: none;
+}
+
+.discover-page .discover-card {
+  grid-template-columns: 36px minmax(0, 512px);
+}
+
+.discover-page .discover-card.discover-feature {
+  grid-template-columns: 36px minmax(0, 1fr);
+  padding-bottom: 24px;
+}
+
+.discover-page .discover-feature .discover-feature-stage {
+  margin-top: 12px;
+  aspect-ratio: 2 / 1;
+}
+
+.discover-page .discover-feature-shot {
+  width: 52%;
 }
 
 /* A post: the site's avatar on the left, everything else beside it. Sizes
@@ -486,6 +516,11 @@
   text-align: center;
 }
 
+.discover-page .discover-more {
+  max-width: 560px;
+  margin-inline: 0;
+}
+
 /* The confirm page's preview: the card at the feed's width, between a
    border above and below as in the feed */
 .discover-preview-section {
@@ -544,23 +579,87 @@
 }
 
 /* Narrower, the layout follows the width it has (a container query, so the
-   page's own margins count): a smaller gap once the block no longer fits,
-   then the feed alone, centred, once it would be under 480px wide beside
-   the box */
-@container discover (max-width: 863px) {
+   page's own margins count). Under two columns' worth, one column: People
+   becomes a row of faces above the feed, scrolled sideways. */
+@container discover (max-width: 767px) {
   .discover {
-    column-gap: 40px;
+    grid-template-columns: minmax(0, 1fr);
   }
-}
 
-@container discover (max-width: 759px) {
-  .discover {
-    grid-template-columns: minmax(0, 560px);
-    justify-content: center;
+  .discover-main,
+  .discover-sidebar {
+    grid-column: 1;
+  }
+
+  .discover-main {
+    grid-row: 2;
   }
 
   .discover-sidebar {
+    position: static;
+    margin-bottom: 32px;
+  }
+
+  .discover-sites {
+    max-width: none;
+  }
+
+  .discover-sites ul {
+    display: flex;
+    gap: 16px;
+    max-width: none;
+    margin-right: calc(-1 * var(--home-gutter, 30px));
+    padding: 6px var(--home-gutter, 30px) 4px 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .discover-sites ul::-webkit-scrollbar {
     display: none;
+  }
+
+  /* min-width: 0, or each name's unwrapped width sets its item's */
+  .discover-sites li {
+    flex: 0 0 72px;
+    min-width: 0;
+  }
+
+  .discover-sites li a {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 0;
+  }
+
+  .discover-sites-avatar,
+  .discover-sites-avatar img {
+    width: 48px;
+    height: 48px;
+  }
+
+  .discover-site-text {
+    width: 100%;
+  }
+
+  .discover-site-name {
+    font-size: 13px;
+    line-height: 17px;
+  }
+
+  .discover-site-bio {
+    display: none;
+  }
+}
+
+/* On phones a featured site's square returns to 4:3, so the screenshot
+   stays large enough to read */
+@container discover (max-width: 599px) {
+  .discover-page .discover-feature .discover-feature-stage {
+    aspect-ratio: 4 / 3;
+  }
+
+  .discover-page .discover-feature-shot {
+    width: 70%;
   }
 }
 
