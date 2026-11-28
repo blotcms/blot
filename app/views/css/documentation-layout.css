@@ -225,15 +225,16 @@ html:has(.documentation-layout)::-webkit-scrollbar-thumb {
 }
 
 /* Every part one very light grey, the current page included; a link
-   darkens when pointed at */
-.documentation-trail li,
-.documentation-trail li:last-child,
-.documentation-trail li + li::before,
-.documentation-trail a {
+   darkens when pointed at. Scoped to .documentation-top: css/trail.css
+   comes later in the bundle and would win at equal specificity. */
+.documentation-top .documentation-trail li,
+.documentation-top .documentation-trail li:last-child,
+.documentation-top .documentation-trail li + li::before,
+.documentation-top .documentation-trail a {
   color: #c8c8c8;
 }
 
-.documentation-trail a:hover {
+.documentation-top .documentation-trail a:hover {
   color: var(--medium-text-color);
   text-decoration: none;
 }
