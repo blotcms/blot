@@ -18,14 +18,13 @@ Paths are normalised with `helper/pathNormalizer`, exactly as entry keys are (`m
 
 ## Redis keys
 
-No key per file. There is a hash, a lookup and a sorted set per order (see Natural order) per directory, and two keys per blog. Every key starts `blog:{blogID}:file`, so blog deletion's `blog:{blogID}:*` sweep takes it with the rest.
+No key per file. There is a hash, a lookup and a sorted set per order (see Natural order) per directory, and one key per blog. Every key starts `blog:{blogID}:file`, so blog deletion's `blog:{blogID}:*` sweep takes it with the rest.
 
 | Key | Type | Contents |
 |-----|------|----------|
 | `blog:{blogID}:file:dir:{dirPath}` | hash | child name → packed record `type\|size\|modified\|sha1` |
 | `blog:{blogID}:file:lower:{dirPath}` | hash | lowercased child name → the child names that fold to it, joined by `/` and sorted |
 | `blog:{blogID}:file:sort:v1:{order}:{dirPath}` | sorted set | the directory's children in one of the orders in `sorts.js`, all at score 0 (see Natural order below). Today the one order is `all`: every child, in natural name order |
-| `blog:{blogID}:file:paths` | sorted set | every path below the root, all at score 0, for `ZRANGEBYLEX` subtree queries |
 | `blog:{blogID}:file:totals` | hash | `bytes`, `files`: the folder's totals, for the storage quota |
 
 For a folder holding `/Posts/a.txt` (5 bytes), `/posts/b.txt` (3 bytes) and an empty directory `/drafts`:
@@ -43,7 +42,6 @@ blog:X:file:sort:v1:all:/Posts  a.txt
 blog:X:file:dir:/posts     b.txt  -> f|3|1700000000000|e9d71f5e...
 blog:X:file:lower:/posts   b.txt  -> b.txt
 blog:X:file:sort:v1:all:/posts  b.txt
-blog:X:file:paths          /Posts /Posts/a.txt /drafts /posts /posts/b.txt
 blog:X:file:totals         bytes -> 8, files -> 2
 ```
 
@@ -51,15 +49,13 @@ The packing is the record type's first letter (`f` or `d`), then size, modified 
 
 Case-insensitive resolution looks each segment up in its directory's lowercased lookup. Names which differ only by case (`/Posts` and `/posts`) share one field, so neither hides the other: the exact name wins, otherwise the first in sorted order, by `helper/caseSensitivePath.pick` over the stored names. Each segment is resolved on its own, without going back to try a sibling, as a file system does.
 
-Subtree queries use the bounds `[/dir/` and `(/dir0` (`0` is the character after `/`), so `/dir b` and `/dir0` stay out.
+Subtree queries (`subtree`, removing a directory, `removeAll`, `rebuild`'s count of directories) walk the directories' hashes, a read per directory. They run for moves, removals, rebuilds and scripts, never for a page view, so nothing keeps every path in one place. Until 28 Nov 2026 a sorted set per blog did (`blog:{blogID}:file:paths`, read with `ZRANGEBYLEX`); it repeated what the hashes hold and was about a quarter of the index's memory. `removeAll` still deletes it, since code from before could add to it during a deploy, until `scripts/storage/remove-file-index-paths.js` has removed the rest.
 
 ### Paging a directory
 
 Listings are in natural name order, the order of each directory's `all` sorted set (see Natural order below). `list` reads a page with `ZRANGEBYLEX` on that set, from just after the member of the name `after` (which `key.sortMember` gives from the name alone, so a cursor need not name an entry still there), one more than the limit to tell whether another page follows, then `HMGET`s the page's records from the hash: a page costs the same however large the directory. `range` reads a page by position instead, for pages a person picks by number: the visible children (not hidden everywhere) are the first ranks of the set, so their total is one `ZLEXCOUNT` and the page one `ZRANGE` by rank.
 
 A directory without the set (none has one until a writer or the backfill builds it) is read whole from its hash and sorted the same way, comparing members as bytes with `key.compareSorted`, so it lists in exactly the set's order.
-
-Paging through the path set instead needs no new key, but a directory's children are interleaved there with all their descendants, so skipping each subdirectory's subtree costs a round trip per subdirectory on the page.
 
 Before the sorted sets, listings read a names set per directory (`blog:{blogID}:file:names:{dirPath}`, the children in code-unit order). Nothing writes one now. The writers still delete a directory's names set with the directory, since code from before could make one during a deploy, until `scripts/storage/remove-file-index-names.js` has removed the rest.
 
@@ -102,7 +98,7 @@ All return promises.
 | `list(blogID, dir, { after, limit })` | One page of a directory in natural name order, starting after the name `after`: `{ entries: [{ name, ...record }], next }`, next the `after` of the following page, or null after the last. `limit` defaults to 1000. Null if dir is not a directory |
 | `listAll(blogID, dir)` | Every entry of a directory, in listing order, or null. Pages through `list`, but holds the whole directory |
 | `range(blogID, dir, { offset, limit, order })` | A page of the visible children (not dotfiles or `.preview.html`) by position: `{ entries, total }`, `order` `asc` or `desc`. Null if dir is not a directory |
-| `subtree(blogID, dir, { pageSize })` | Async iterator over every path below dir, in byte order of the whole path |
+| `subtree(blogID, dir)` | Async iterator over every path below dir, each directory before what is in it and siblings in byte order. A read per directory |
 | `resolveCaseInsensitive(blogID, path)` | The stored spelling of path, or null |
 | `totals(blogID)` | `{ bytes, files }` |
 | `set(blogID, path, record)`, `setMany(blogID, [{ path, ...record }])` | Record paths, giving every ancestor without a record a directory record (S3 has implicit directories). Refuses a path below a file (ENOTDIR), a file over a directory (EISDIR) and a directory over a file (EEXIST) |
@@ -111,9 +107,9 @@ All return promises.
 | `remove(blogID, path)` | Forget a file, or a directory and its whole subtree. Resolves to the removed record, or null |
 | `removeAll(blogID)` | Forget the whole folder |
 | `checkSorts(blogID, { apply, order })` | Async iterator of `{ dir, order, state, expected, card, bytes, longest }` per directory and order: `state` is `ok`, `missing` or `mismatched`. With `apply`, rebuilds each set which isn't ok; must run under the sync lock then |
-| `rebuild(blogID, records)` | Replace the index with records from a full listing (an iterable or async iterable). Resolves to `{ files, dirs, bytes, skipped }`. A record which conflicts with one before it (below a file, or a file and a directory at one path, which S3 can hold and a file system cannot) is skipped and listed in `skipped` as `{ path, type, code }`. Flags of unchanged files are carried over |
+| `rebuild(blogID, records)` | Replace the index with records from a full listing (an iterable or async iterable). Resolves to `{ files, dirs, bytes, skipped }`. A record which conflicts with one before it (below a file, or a file and a directory at one path, which S3 can hold and a file system cannot) is skipped and listed in `skipped` as `{ path, type, code }`. Flags of unchanged files are carried over. Before writing it also deletes any of the blog's index keys a walk from the root doesn't reach (a `SCAN` of the keyspace) |
 
-Removing a directory goes through its subtree deepest first, a page at a time, so each file's size is still in its parent's hash when the totals are corrected. If it stops part way, what is left is consistent apart from a lowercased lookup which may still name a child already gone, until its directory goes too.
+Removing a directory goes through its subtree deepest first, a directory at a time and a page of it at a time, so each file's size is still in its parent's hash when the totals are corrected. If it stops part way, what is left is consistent apart from a lowercased lookup which may still name a child already gone, until its directory goes too.
 
 ---
 

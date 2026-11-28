@@ -181,8 +181,8 @@ describe("models/file", function () {
       }
 
       // A hash, a lowercased lookup and a natural-order sorted set each for
-      // "/" and "/d", the path set and the totals
-      expect(keys.length).toEqual(8);
+      // "/" and "/d", and the totals
+      expect(keys.length).toEqual(7);
     });
   });
 
@@ -557,20 +557,28 @@ describe("models/file", function () {
   });
 
   describe("subtree", function () {
-    it("yields every path below a directory, a page at a time, and nothing beside it", async function () {
+    it("yields every path below a directory, each directory before what is in it, and nothing beside it", async function () {
       await File.set(this.blog.id, "/a/1", file(1));
       await File.set(this.blog.id, "/a/b/2", file(1));
       await File.set(this.blog.id, "/a b", file(1));
       await File.set(this.blog.id, "/a0", file(1));
       await File.set(this.blog.id, "/ab/3", file(1));
 
-      expect(
-        await collect(File.subtree(this.blog.id, "/a", { pageSize: 2 }))
-      ).toEqual(["/a/1", "/a/b", "/a/b/2"]);
+      expect(await collect(File.subtree(this.blog.id, "/a"))).toEqual([
+        "/a/1",
+        "/a/b",
+        "/a/b/2",
+      ]);
       expect((await collect(File.subtree(this.blog.id, "/"))).length).toEqual(
         8
       );
       expect(await collect(File.subtree(this.blog.id, "/nope"))).toEqual([]);
+    });
+
+    it("keeps no set of every path, walking the directories' hashes instead", async function () {
+      await File.set(this.blog.id, "/a/b/c.txt", file(1));
+
+      expect(await client.exists(File.key.paths(this.blog.id))).toEqual(0);
     });
   });
 
@@ -734,6 +742,22 @@ describe("models/file", function () {
       ]);
       expect(await File.get(this.blog.id, "/c.txt")).toEqual(
         Object.assign(file(4), { sha1: "" })
+      );
+    });
+
+    it("sweeps keys of directories no walk from the root reaches", async function () {
+      // As an old unit, reading the path set, leaves them when it removes a
+      // parent without them
+      await client.hSet(File.key.dir(this.blog.id, "/gone/x"), "a", "f|1|1|");
+      await client.hSet(File.key.lower(this.blog.id, "/gone/x"), "a", "a");
+
+      await File.rebuild(this.blog.id, []);
+
+      expect(await client.exists(File.key.dir(this.blog.id, "/gone/x"))).toBe(
+        0
+      );
+      expect(await client.exists(File.key.lower(this.blog.id, "/gone/x"))).toBe(
+        0
       );
     });
 
