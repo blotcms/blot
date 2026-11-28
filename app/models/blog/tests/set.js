@@ -21,6 +21,19 @@ describe("Blog.set", function () {
     expect(errors.handle).toBeTruthy();
   });
 
+  it("changes nothing for a blog which is not in the blogs set", async function () {
+    await client.sRem(key.ids, this.blog.id);
+
+    try {
+      expect(await set(this.blog.id, { cacheID: Date.now() })).toEqual([]);
+      expect(await client.hGet(key.info(this.blog.id), "cacheID")).toEqual(
+        String(this.blog.cacheID)
+      );
+    } finally {
+      await client.sAdd(key.ids, this.blog.id);
+    }
+  });
+
   it("will set the domain", async function () {
     var domain = "example.com";
 

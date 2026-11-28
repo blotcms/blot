@@ -52,6 +52,17 @@ describe("user remove", function () {
     expect(result).toBeNull();
   });
 
+  it("removes the keys under the user's prefix", async function () {
+    var user = await createTestUser();
+    await client.set("user:" + user.uid + ":git:token", "token");
+    await client.set("user:" + user.uid + ":git:status", "status");
+
+    await remove(user.uid);
+
+    expect(await client.exists("user:" + user.uid + ":git:token")).toBe(0);
+    expect(await client.exists("user:" + user.uid + ":git:status")).toBe(0);
+  });
+
   it("removes user from uids set", async function () {
     var user = await createTestUser();
     var beforeMembers = await client.sMembers(key.uids);

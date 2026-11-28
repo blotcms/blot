@@ -16,6 +16,10 @@ module.exports = async function setStatus(blogID, status) {
 
   ensure(status, TYPE.status, true);
 
+  // A sync can report after its blog was removed. Writing then would make a
+  // new info hash and status list for a blog that no longer exists.
+  if (!(await client.sIsMember(key.ids, blogID))) return;
+
   const multi = client.multi();
   const statusString = JSON.stringify(status);
 

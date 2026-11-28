@@ -17,6 +17,22 @@ describe("Blog.setStatus", function () {
     expect(blog.status).toEqual(status);
   });
 
+  it("writes nothing for a blog which has been removed", async function () {
+    const client = require("models/client");
+    const key = require("../key");
+
+    await client.sRem(key.ids, this.blog.id);
+    await client.del([key.info(this.blog.id), key.status(this.blog.id)]);
+
+    await setStatus(this.blog.id, { message: "Late" });
+
+    expect(await client.exists(key.info(this.blog.id))).toBe(0);
+    expect(await client.exists(key.status(this.blog.id))).toBe(0);
+
+    // Back in the set, so the blog helper's cleanup can remove it
+    await client.sAdd(key.ids, this.blog.id);
+  });
+
   it("fills in default values for a status", async function () {
     await setStatus(this.blog.id, {
       message: "Hey",

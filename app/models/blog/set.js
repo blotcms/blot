@@ -26,10 +26,15 @@ function Changes(latest, former) {
   return changes;
 }
 
-// Resolves to the list of changed fields. Rejects with validate's errors
-// object, or with the error that stopped the save.
+// Resolves to the list of changed fields: none for a blog which is not in
+// the blogs set (one removed while something, such as a late cacheID bump,
+// still had it; create adds a new blog to the set before its first save).
+// Rejects with validate's errors object, or with the error that stopped the
+// save.
 module.exports = async function set(blogID, blog) {
   ensure(blogID, "string");
+
+  if (!(await client.sIsMember(key.ids, blogID))) return [];
 
   var multi = client.multi();
   var formerBackupDomain, changes, backupDomain;

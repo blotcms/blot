@@ -25,6 +25,15 @@ module.exports = async function remove(uid) {
     keys.push(key.paypal(user.paypal.id));
   }
 
+  // Everything else under the user's prefix, such as the git client's token
+  // and status
+  for await (const found of client.scanIterator({
+    MATCH: "user:" + uid + ":*",
+    COUNT: 1000,
+  })) {
+    keys = keys.concat(found);
+  }
+
   var multi = client.multi();
 
   multi.sRem(key.uids, uid);
