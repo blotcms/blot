@@ -47,6 +47,34 @@ describe("template", () => {
     expect((await getView(this.template.id, name)).content).toEqual("second");
   });
 
+  it("stores a long source compressed and a short one as written", async function () {
+    const viewContent = require("../util/viewContent");
+    const long = "<p>{{title}}</p>\n".repeat(100);
+    const longKey = key.view(this.template.id, "long.html");
+
+    await setView(this.template.id, { name: "long.html", content: long });
+
+    expect(await client.hExists(longKey, viewContent.FIELD)).toBeTruthy();
+    expect(await client.hExists(longKey, "content")).toBeFalsy();
+    expect((await getView(this.template.id, "long.html")).content).toEqual(
+      long
+    );
+
+    // Shortened, it is stored as written again
+    await setView(this.template.id, { name: "long.html", content: "short" });
+
+    expect(await client.hExists(longKey, viewContent.FIELD)).toBeFalsy();
+    expect((await getView(this.template.id, "long.html")).content).toEqual(
+      "short"
+    );
+
+    // An unchanged save short-circuits on the unpacked source
+    await setView(this.template.id, { name: "long.html", content: long });
+    const cacheID = (await getMetadata(this.template.id)).cacheID;
+    await setView(this.template.id, { name: "long.html", content: long });
+    expect((await getMetadata(this.template.id)).cacheID).toEqual(cacheID);
+  });
+
   it("stores file-backed partials under the literal reference from the content", async function () {
     // The key must stay verbatim: Mustache resolves "{{> /pages/home.txt}}"
     // by that exact string, so rewriting it (e.g. to a true-case entry path)

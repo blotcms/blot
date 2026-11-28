@@ -329,13 +329,19 @@ module.exports = async function setView(templateID, updates, options = {}) {
 
   view = serializeRedisHashValues(serialize(view, viewModel));
 
+  // A long source is stored compressed, a short one as written, and the
+  // other field removed (util/viewContent)
+  var packed = await viewContent.pack(view.content);
+
+  if (packed) {
+    view[viewContent.FIELD] = packed;
+    delete view.content;
+  }
+
   // Delete url and urlPatterns from Redis hash if they were removed
   var multi = client.multi();
   multi.hSet(viewKey, view);
-
-  // The source is saved as written, so drop any compressed copy the backfill
-  // left (util/viewContent)
-  multi.hDel(viewKey, viewContent.FIELD);
+  multi.hDel(viewKey, packed ? "content" : viewContent.FIELD);
 
   if (shouldRemoveUrl) {
     multi.hDel(viewKey, "url");
