@@ -192,6 +192,23 @@ html:has(.documentation-layout)::-webkit-scrollbar-thumb {
   outline-offset: -1px;
 }
 
+/* Wide enough for the sidebar, the page takes the homepage's three columns
+   and 30px gaps (css/home.css): the sidebar in the first, the article
+   starting on the second, where the homepage rows and pricing's questions
+   start, at the same 550px measure as before */
+@media (min-width: 1081px) {
+  .documentation-layout {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 30px;
+  }
+
+  .documentation-layout .documentation-article {
+    grid-column: 2 / span 2;
+    max-width: 550px;
+    margin-inline: 0;
+  }
+}
+
 /* Narrower, the sidebar goes */
 @media (max-width: 1080px) {
   .documentation-sidebar {
