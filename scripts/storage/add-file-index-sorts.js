@@ -24,8 +24,8 @@ const hold = require("sync/hold");
 const ZIPLIST_ENTRIES = 128;
 
 // Values of zset-max-ziplist-value to estimate for: Redis's default, and
-// the one the plan in #2693 considers
-const ZIPLIST_VALUES = [64, 250];
+// the one config/redis/redis.conf sets
+const ZIPLIST_VALUES = [64, 256];
 
 const PAUSE_MS = 2;
 
