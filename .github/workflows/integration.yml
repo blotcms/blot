@@ -421,6 +421,7 @@ jobs:
             -e PROXY_UNIT_MAIN=127.0.0.1:8090 -e PROXY_UNIT_WORKER=127.0.0.1:8089 -e PROXY_PEER_MAIN=127.0.0.1:8088 -e PROXY_PEER_WORKER=127.0.0.1:8088 \
             -e PROXY_ACME_CA=https://127.0.0.1:14000/dir \
             -e ACME_CA_CERT=/pebble-ca.pem \
+            -e PROXY_ACME_HOOK_SECRET=ci-hook-secret \
             -v "$PWD/pebble.minica.pem:/pebble-ca.pem:ro" \
             -v blot-acme-storage:/etc/resty-auto-ssl \
             blot-proxy:acme
@@ -479,6 +480,19 @@ jobs:
       - name: The deploy reads the certificate auto-ssl stored
         run: bash proxy/e2e/stored-cert-checks.sh
 
+      # auto-ssl gives a challenge token no expiry and deletes it only after
+      # a successful issuance; init.conf's adapter wrapper adds one (#3014)
+      - name: Challenge tokens expire
+        run: |
+          set -eu
+          docker exec proxy curl -sSf -XPOST -H "X-Hook-Secret: ci-hook-secret" \
+            --data-urlencode domain=ttl-check.test --data-urlencode token_filename=ci-token \
+            --data-urlencode token_value=ci-value http://127.0.0.1:8999/deploy-challenge
+          ttl=$(docker exec redis redis-cli ttl ssl:ttl-check.test:challenge:ci-token)
+          docker exec redis redis-cli del ssl:ttl-check.test:challenge:ci-token
+          echo "ttl: $ttl"
+          [ "$ttl" -gt 0 ] && [ "$ttl" -le 3600 ] || { echo "FAIL: the challenge token has TTL $ttl" >&2; exit 1; }
+
       - name: Certificate persists across a container recreate
         run: |
           set -eux
@@ -500,6 +514,7 @@ jobs:
             -e PROXY_UNIT_MAIN=127.0.0.1:8090 -e PROXY_UNIT_WORKER=127.0.0.1:8089 -e PROXY_PEER_MAIN=127.0.0.1:8088 -e PROXY_PEER_WORKER=127.0.0.1:8088 \
             -e PROXY_ACME_CA=https://127.0.0.1:14000/dir \
             -e ACME_CA_CERT=/pebble-ca.pem \
+            -e PROXY_ACME_HOOK_SECRET=ci-hook-secret \
             -v "$PWD/pebble.minica.pem:/pebble-ca.pem:ro" \
             -v blot-acme-storage:/etc/resty-auto-ssl \
             blot-proxy:acme
