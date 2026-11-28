@@ -94,7 +94,8 @@ OFFSITE_PROFILE=""; OFFSITE_BUCKET=""
 STAGE=""; IMAGE=""; EIP_SSH_DIR=""
 
 die() { echo "error: $*" >&2; exit 1; }
-say() { printf '\n==> %s\n' "$*"; }
+# Each step line carries the UTC time, so a log shows how long each part took.
+say() { printf '\n==> [%s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -823,7 +824,7 @@ EOF
     wait_public_health "$eip_address" "$host"
   fi
   act unfreeze
-  echo "Writes resumed $(($(date +%s) - t0))s after the freeze"
+  echo "Writes resumed at $(date -u +%H:%M:%S) UTC, $(($(date +%s) - t0))s after the freeze"
 
   # None of this needs writes stopped. The old units get no traffic once the
   # Elastic IP has moved, and any write they still try fails on what is now a

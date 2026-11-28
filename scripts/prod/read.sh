@@ -21,7 +21,7 @@ set -euo pipefail
 #   scripts/prod/read.sh release                    the release (commit) each unit runs
 #   scripts/prod/read.sh health-check-log [opts]    restarts made by the health-check script
 #   scripts/prod/read.sh node-reports <unit>        newest Node diagnostic reports for a unit
-#   scripts/prod/read.sh host                       uptime, disk, memory, overcommit
+#   scripts/prod/read.sh host                       uptime, kernel, disk, memory, overcommit
 #   scripts/prod/read.sh dmesg-oom                  kernel OOM kills
 #   scripts/prod/read.sh tcpmem                     socket memory against tcp_mem, and its 5-minute log
 #   scripts/prod/read.sh unit-mem [--since <window>] the memory sampler's peaks per cgroup (unit-mem-summary.sh):
@@ -222,7 +222,7 @@ case "$command" in
     name=$(unit_name "${1:-}")
     remote "ls -lt /var/www/blot/data/node-reports/$name/ | head -20" ;;
   host)
-    remote "uptime; echo; df -h / /backups $LOG_DIRECTORY 2>/dev/null; echo; free -m; echo; sysctl vm.overcommit_memory" ;;
+    remote "uptime; uname -r; rpm -q kernel6.18 kernel6.12 kernel 2>/dev/null | grep -v 'not installed'; echo; df -h / /backups $LOG_DIRECTORY 2>/dev/null; echo; free -m; echo; sysctl vm.overcommit_memory" ;;
   dmesg-oom)
     remote "sudo -n dmesg -T | grep -i -E 'oom|killed process' | tail -n 50" ;;
   tcpmem)
