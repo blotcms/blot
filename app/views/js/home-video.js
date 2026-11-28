@@ -4,44 +4,10 @@
 // card is on screen; with reduced motion it stays a still frame. Clicking the
 // card opens the video (js/watch.js, data-watch-trigger).
 
+const springValue = require("./spring.js");
+
 const card = document.querySelector(".home-video");
 const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-
-// A critically damped spring that settles in about `seconds`, on rAF. The
-// value keeps its velocity when retargeted, so the pointer never jolts.
-function springValue(value, onUpdate) {
-  let velocity = 0;
-  let frame = null;
-  onUpdate(value);
-
-  return {
-    to(target, seconds) {
-      const omega = (2 * Math.PI) / (1.2 * seconds);
-      let last = performance.now();
-      cancelAnimationFrame(frame);
-      const tick = (now) => {
-        // Small steps keep the integration stable after a dropped frame
-        const dt = Math.min(0.064, (now - last) / 1000);
-        last = now;
-        const force = -omega * omega * (value - target) - 2 * omega * velocity;
-        velocity += force * dt;
-        value += velocity * dt;
-        if (Math.abs(value - target) < 0.1 && Math.abs(velocity) < 1) {
-          value = target;
-          velocity = 0;
-          onUpdate(value);
-          return;
-        }
-        onUpdate(value);
-        frame = requestAnimationFrame(tick);
-      };
-      frame = requestAnimationFrame(tick);
-    },
-    stop() {
-      cancelAnimationFrame(frame);
-    },
-  };
-}
 
 if (card && !motion.matches) {
   const scene = card.querySelector(".home-video-scene");

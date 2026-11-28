@@ -4,6 +4,7 @@ require("./instant.page.js");
 require("./tagify.js");
 require("./examples.js");
 require("./home-video.js");
+require("./home-faq.js");
 require("./home-folder-carousel.js");
 require("./templates.js");
 require("./questions-ask.js");

@@ -487,21 +487,34 @@
 
 /* Questions */
 
+/* After the pattern library's FAQ "animated expansion": soft rounded
+   cards, a round toggle whose plus turns into a minus. js/home-faq.js
+   animates the answer's height and closes the other answers; without it
+   each <details> opens and closes as usual. Also on the pricing page. */
 .home .home-faq {
   grid-column: 2 / span 2;
+  display: grid;
+  gap: 8px;
   margin-top: 40px;
-  border-top: 1px solid var(--border-color);
 }
 
 .home-faq details {
-  border-bottom: 1px solid var(--border-color);
+  overflow: hidden;
+  border-radius: 16px;
+  background: #fafafa;
+  background: rgb(44 45 48 / 2%);
 }
 
 .home-faq summary {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 7px 0;
+  gap: 48px;
+  padding: 18px 24px;
+  border-radius: 16px;
+  color: #2c2d30;
+  font-weight: 500;
+  letter-spacing: -0.01em;
   list-style: none;
   cursor: pointer;
 }
@@ -510,22 +523,106 @@
   display: none;
 }
 
-.home-faq summary::after {
-  color: var(--medium-text-color);
-  content: "+";
+.home-faq summary:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -3px;
 }
 
-.home-faq details[open] summary::after {
-  content: "\2212";
+.home-faq .faq-toggle {
+  position: relative;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgb(44 45 48 / 3%);
+  transition: transform 100ms ease;
 }
 
-.home-faq summary:hover {
-  color: var(--accent-color);
+/* The plus: a horizontal line and a vertical one */
+.home-faq .faq-toggle::before,
+.home-faq .faq-toggle::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 2px;
+  background: #2c2d30;
+  content: "";
+  transition: transform 450ms cubic-bezier(.3, 1.3, .4, 1);
+}
+
+.home-faq .faq-toggle::before {
+  width: 9.5px;
+  height: 2px;
+  transform: translate(-50%, -50%);
+}
+
+.home-faq .faq-toggle::after {
+  width: 2px;
+  height: 9.5px;
+  transform: translate(-50%, -50%);
+}
+
+/* Open (is-open while the script runs, so the sign turns at once):
+   the horizontal line turns over, the vertical one turns and shrinks away */
+.home-faq:not(.faq-js) details[open] .faq-toggle::before,
+.home-faq details.is-open .faq-toggle::before {
+  transform: translate(-50%, -50%) rotate(180deg);
+}
+
+.home-faq:not(.faq-js) details[open] .faq-toggle::after,
+.home-faq details.is-open .faq-toggle::after {
+  transform: translate(-50%, -50%) rotate(80deg) scaleY(0);
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .home-faq summary:active .faq-toggle {
+    transform: scale(.95);
+  }
+}
+
+/* The answer (js/home-faq.js wraps it in .faq-answer to animate its
+   height); its text fades in just after the answer starts to open */
+.home-faq .faq-answer {
+  height: 0;
+  overflow: hidden;
+}
+
+.home-faq .faq-answer-inner {
+  opacity: 0;
+  transition: opacity 250ms ease;
+}
+
+.home-faq details.is-open .faq-answer-inner {
+  opacity: 1;
+  transition-delay: 100ms;
 }
 
 .home .home-faq p {
-  padding-bottom: 12px;
-  color: var(--medium-text-color);
+  padding: 0 64px 18px 24px;
+  color: rgb(44 45 48 / 80%);
+}
+
+.home .home-faq p + p {
+  margin-top: -8px;
+}
+
+@media (max-width: 512px) {
+  .home-faq summary {
+    gap: 16px;
+    padding: 12px 16px;
+  }
+
+  .home .home-faq p {
+    padding: 0 16px 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-faq .faq-toggle::before,
+  .home-faq .faq-toggle::after,
+  .home-faq .faq-answer-inner {
+    transition: none;
+  }
 }
 
 @media (max-width: 1000px) {
