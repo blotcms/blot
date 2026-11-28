@@ -204,7 +204,8 @@ html[data-auth="in"] .signed-in {
   align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
-  padding: 20px 22px 12px 17px;
+  /* The folder 30px from the edge, on the pages' gutter (css/home.css) */
+  padding: 20px 30px 12px 17px;
 }
 
 .public-header .site-brand {
@@ -262,22 +263,28 @@ html[data-auth="in"] .signed-in {
   color: #fff;
 }
 
-/* Discover, Documentation and Pricing sit beside the logo; the account
-   links (Sign up and Log in, or Dashboard) on the right */
-.public-header .public-navigation {
+/* Templates, Documentation, Pricing and Discover sit beside the logo; the
+   account links (Sign up and Log in, or Dashboard) on the right, their edge
+   on the pages' 30px gutter (css/home.css) */
+.public-header .public-navigation,
+.public-header .public-account {
   display: flex;
-  flex: 1;
   flex-wrap: wrap;
-  justify-content: flex-start;
   align-items: flex-start;
   gap: 10px;
 }
 
-.public-header .public-navigation .public-account {
-  margin-left: auto;
+.public-header .public-navigation {
+  flex: 1;
+  justify-content: flex-start;
 }
 
-.public-header .public-navigation a {
+.public-header .public-account {
+  flex-shrink: 0;
+}
+
+.public-header .public-navigation a,
+.public-header .public-account a {
   display: block;
   padding: 4px 8px;
   border-radius: 9999px;
@@ -290,11 +297,13 @@ html[data-auth="in"] .signed-in {
 }
 
 .public-header .public-navigation a:hover,
-.public-header .public-navigation a.selected {
+.public-header .public-navigation a.selected,
+.public-header .public-account a:hover {
   background: #e9e9e9;
 }
 
-.public-header .public-navigation a:focus-visible {
+.public-header .public-navigation a:focus-visible,
+.public-header .public-account a:focus-visible {
   outline: 2px solid var(--accent-color);
   outline-offset: 2px;
 }
@@ -304,8 +313,9 @@ html[data-auth="in"] .signed-in {
     margin-bottom: 0;
   }
 
+  /* The folder on the phone gutter, 20px */
   .public-header .public-masthead {
-    padding-right: 12px;
+    padding-right: 20px;
     padding-left: 7px;
   }
 
@@ -315,5 +325,26 @@ html[data-auth="in"] .signed-in {
     width: auto;
     padding: 0;
     border: 0;
+  }
+}
+
+/* Too narrow for one row: the logo and the account links on top, the four
+   links in a row of their own under them, from the gutter */
+@media (max-width: 640px) {
+  .public-header .public-masthead {
+    flex-wrap: wrap;
+    row-gap: 16px;
+  }
+
+  .public-header .public-account {
+    order: 1;
+    margin-left: auto;
+  }
+
+  .header.public-header .public-navigation {
+    order: 2;
+    flex: 1 1 100%;
+    gap: 6px;
+    padding-left: 13px;
   }
 }

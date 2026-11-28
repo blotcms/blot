@@ -11,11 +11,14 @@
 
     <nav class="site-navigation public-navigation" aria-label="Main navigation">
       {{> navigation}}
+    </nav>
+
+    <div class="public-account">
       {{^user}}
-      <a class="signed-out public-account" href="/sites/sign-up">Sign up</a>
+      <a class="signed-out" href="/sites/sign-up">Sign up</a>
       <a class="signed-out" href="/sites/log-in">Log in</a>
       {{/user}}
-      <a class="signed-in public-account" href="/sites">Dashboard</a>
-    </nav>
+      <a class="signed-in" href="/sites">Dashboard</a>
+    </div>
   </div>
 </header>
