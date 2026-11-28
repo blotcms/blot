@@ -232,7 +232,8 @@ html[data-auth="in"] .signed-in {
   position: absolute;
   inset: -9px -5px;
   border-radius: 6px;
-  background: #e6e6e6;
+  /* The section links' hover pill's grey (below) */
+  background: #f9f9f9;
   opacity: 0;
   transition: opacity 140ms ease;
   content: "";
@@ -255,12 +256,6 @@ html[data-auth="in"] .signed-in {
 .public-header .site-brand:hover .site-brand-folder::before,
 .public-header .site-brand:focus-visible .site-brand-folder::before {
   opacity: 1;
-}
-
-.public-header .site-brand:hover .site-brand-label,
-.public-header .site-brand:focus-visible .site-brand-label {
-  background: var(--brochure-accent-color);
-  color: #fff;
 }
 
 /* Templates, Documentation, Pricing and Discover sit beside the logo; the
