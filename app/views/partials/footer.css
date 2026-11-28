@@ -42,3 +42,22 @@ footer a {
 footer a:hover {
     color: var(--accent-color);
 }
+
+/* The public pages (css/home.css, css/documentation-layout.css): gaps
+   between the links rather than padding on them, so a group that wraps
+   on a phone starts its new line on the gutter */
+.home-content > footer,
+.documentation-layout > footer {
+  gap: 8px 32px;
+}
+
+.home-content > footer ul,
+.documentation-layout > footer ul {
+  gap: 8px 16px;
+  padding: 0;
+}
+
+.home-content > footer a,
+.documentation-layout > footer a {
+  padding: 0;
+}

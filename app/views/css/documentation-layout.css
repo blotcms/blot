@@ -51,8 +51,7 @@ html:has(.documentation-layout)::-webkit-scrollbar-thumb {
   letter-spacing: -.09008px;
 }
 
-.documentation-layout .documentation-article,
-.documentation-layout > footer {
+.documentation-layout .documentation-article {
   grid-column: 2;
   width: auto;
   min-width: 0;
@@ -63,8 +62,10 @@ html:has(.documentation-layout)::-webkit-scrollbar-thumb {
   overflow-wrap: break-word;
 }
 
+/* Its baseline on the section title's (19px on a 28px line, 14px text on a
+   20px one): 6px lower */
 .documentation-article > h1 {
-  margin: 0 0 24px;
+  margin: 6px 0 24px;
   padding: 0;
   font-size: 14px;
   font-weight: 500;
@@ -108,8 +109,11 @@ html:has(.documentation-layout)::-webkit-scrollbar-thumb {
   margin-bottom: 0;
 }
 
+/* The footer across the page, its ends on the hairline's, as on the other
+   wide pages */
 .documentation-layout > footer {
-  margin-top: 64px;
+  grid-column: 1 / -1;
+  margin: 64px 0 0;
 }
 
 .documentation-sidebar {
@@ -225,6 +229,10 @@ html:has(.documentation-layout)::-webkit-scrollbar-thumb {
 
   .documentation-title {
     margin-bottom: 32px;
+  }
+
+  .documentation-article > h1 {
+    margin-top: 0;
   }
 }
 

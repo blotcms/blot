@@ -1,11 +1,11 @@
 .content.home-content {
   --home-gutter: 30px;
-  --footer-gutter: 4rem;
   padding: 0;
 }
 
+/* The footer's links on the same gutter as the hairlines above */
 .home-content > footer {
-  margin-inline: var(--footer-gutter);
+  margin-inline: var(--home-gutter);
 }
 
 .home-portfolio {
@@ -283,7 +283,6 @@
 @media (max-width: 768px) {
   .content.home-content {
     --home-gutter: 20px;
-    --footer-gutter: 2rem;
   }
 
   .home-portfolio .home-intro {
@@ -296,10 +295,6 @@
 }
 
 @media (max-width: 480px) {
-  .content.home-content {
-    --footer-gutter: 1rem;
-  }
-
   .home-portfolio .home-intro h1 {
     min-height: 140px;
   }
@@ -544,6 +539,9 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  /* The title on the left and its link on the right, then everything
+     else across both columns. The link names column 2: a column 3 would
+     add an implicit third column that 1 / -1 does not reach. */
   .home-row > *,
   .home .home-row-intro,
   .home .home-tool-list,
@@ -551,6 +549,14 @@
   .home .home-done,
   .home .home-faq {
     grid-column: 1 / -1;
+  }
+
+  .home-row > h2 {
+    grid-column: 1;
+  }
+
+  .home .home-row-action {
+    grid-column: 2;
   }
 
   .home-row {
@@ -640,9 +646,10 @@
   object-position: top;
 }
 
+/* Quiet, but readable on the grey (4.8:1) */
 .home-template-caption {
   padding: 0 20px 20px;
-  color: #9b9b98;
+  color: #6b6b68;
 }
 
 @media (max-width: 1000px) {
